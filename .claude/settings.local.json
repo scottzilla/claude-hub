@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm view @anthropic-ai/claude-agent-sdk)",
+      "WebFetch(domain:docs.claude.com)",
+      "Bash(npm install)",
+      "Bash(node -e \"import\\(''@anthropic-ai/claude-agent-sdk''\\).then\\(m => console.log\\(Object.keys\\(m\\).join\\(''\\\\n''\\)\\)\\)\")",
+      "Bash(npx tsc --noEmit)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.anthropic.com)",
+      "WebSearch",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(mkdir -p plugins/claude-workers/.claude-plugin)",
+      "Bash(mv .claude-plugin/plugin.json plugins/claude-workers/.claude-plugin/)",
+      "Bash(rmdir .claude-plugin)",
+      "Bash(mv agents:*)",
+      "Bash(mv src:*)",
+      "Bash(mv dist:*)",
+      "Bash(mv .mcp.json plugins/claude-workers/.mcp.json)",
+      "Bash(mv CLAUDE.md plugins/claude-workers/CLAUDE.md)",
+      "Bash(mv package.json plugins/claude-workers/package.json)",
+      "Bash(mv package-lock.json plugins/claude-workers/package-lock.json)",
+      "Bash(mv tsconfig.json plugins/claude-workers/tsconfig.json)",
+      "Bash(mv node_modules plugins/claude-workers/node_modules)"
+    ]
+  }
+}

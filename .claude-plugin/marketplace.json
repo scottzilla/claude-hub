@@ -1,0 +1,26 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "scottzilla",
+  "owner": {
+    "name": "scottzilla"
+  },
+  "metadata": {
+    "description": "A collection of Claude Code plugins for cost-optimized AI task delegation",
+    "version": "1.0.0",
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "claude-dispatch",
+      "source": "claude-dispatch",
+      "description": "Three-tier worker agents that route tasks to Haiku, Sonnet, or Opus based on complexity",
+      "version": "1.0.0",
+      "author": {
+        "name": "scottzilla"
+      },
+      "category": "development",
+      "keywords": ["agents", "cost-optimization", "delegation", "workers"],
+      "license": "MIT"
+    }
+  ]
+}

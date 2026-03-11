@@ -1,0 +1,5 @@
+{
+  "name": "claude-dispatch",
+  "version": "1.0.0",
+  "description": "Three-tier worker agents for cost-optimized task delegation"
+}
