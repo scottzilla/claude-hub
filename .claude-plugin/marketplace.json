@@ -2,6 +2,9 @@
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "scottzilla",
   "description": "Claude Code plugins for cost-optimized AI task delegation",
+  "owner": {
+    "name": "scottzilla"
+  },
   "plugins": [
     {
       "name": "claude-dispatch",
