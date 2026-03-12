@@ -7,7 +7,7 @@ export interface WorkerConfig {
 
 export const workers: Record<string, WorkerConfig> = {
   quick_task: {
-    model: "claude-haiku-4-5-20251001",
+    model: "claude-haiku-latest",
     maxTokens: 8192,
     description:
       "Fast, lightweight worker for simple lookups, formatting, " +
@@ -23,7 +23,7 @@ Be concise. Give direct answers. Do not over-explain.`,
   },
 
   code_task: {
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-latest",
     maxTokens: 16384,
     description:
       "General-purpose coding worker for writing code, fixing bugs, " +
@@ -45,7 +45,7 @@ Focus on working code, not lengthy commentary.`,
   },
 
   deep_think: {
-    model: "claude-opus-4-6",
+    model: "claude-opus-latest",
     maxTokens: 32768,
     description:
       "Advanced reasoning worker for architecture design, security audits, " +
