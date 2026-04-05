@@ -24,6 +24,12 @@ const VIEWER_QUERY = `
   }
 `;
 
+const GET_USER_QUERY = `
+  query GetUser($id: String!) {
+    user(id: $id) { id name email active displayName }
+  }
+`;
+
 export function registerTeamTools(server: McpServer) {
   server.registerTool(
     "linear_list_teams",
@@ -58,6 +64,20 @@ export function registerTeamTools(server: McpServer) {
     async () => {
       const data = await gql<{ viewer: unknown }>(VIEWER_QUERY);
       return { content: [{ type: "text" as const, text: JSON.stringify(data.viewer, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "linear_get_user",
+    {
+      description: "Get a user by ID. Returns name, email, active status.",
+      inputSchema: {
+        userId: z.string().describe("User ID"),
+      },
+    },
+    async (args) => {
+      const data = await gql<{ user: unknown }>(GET_USER_QUERY, { id: args.userId });
+      return { content: [{ type: "text" as const, text: JSON.stringify(data.user, null, 2) }] };
     },
   );
 }
