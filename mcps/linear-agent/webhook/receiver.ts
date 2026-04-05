@@ -5,10 +5,14 @@ import { createHmac, randomUUID } from "node:crypto";
 import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { spawn } from "node:child_process";
+import { getAccessToken } from "../src/auth.js";
 
 const PORT = parseInt(process.env.WEBHOOK_PORT || "3847", 10);
 const SECRET = process.env.LINEAR_WEBHOOK_SECRET;
 const EVENTS_DIR = join(process.env.LINEAR_AGENT_DIR || join(homedir(), ".linear-agent"), "events");
+const CLAUDE_BIN = process.env.CLAUDE_BIN || "claude";
+const TARGET_REPO = process.env.WOTERCLIP_REPO;
 
 if (!SECRET) {
   console.error("LINEAR_WEBHOOK_SECRET is required");
@@ -23,6 +27,89 @@ function verifySignature(body: string, signature: string | null): boolean {
 
 async function ensureEventsDir() {
   await mkdir(EVENTS_DIR, { recursive: true, mode: 0o700 });
+}
+
+async function linearGql(query: string, variables: Record<string, unknown>): Promise<unknown> {
+  const token = await getAccessToken();
+  const res = await fetch("https://api.linear.app/graphql", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: token,
+    },
+    body: JSON.stringify({ query, variables }),
+  });
+  if (!res.ok) {
+    throw new Error(`Linear API error (${res.status}): ${await res.text()}`);
+  }
+  const json = await res.json() as { data?: unknown; errors?: Array<{ message: string }> };
+  if (json.errors?.length) {
+    throw new Error(`GraphQL error: ${json.errors.map(e => e.message).join("; ")}`);
+  }
+  return json.data;
+}
+
+const ACK_MUTATION = `
+  mutation AckSession($input: AgentActivityCreateInput!) {
+    agentActivityCreate(input: $input) {
+      success
+    }
+  }
+`;
+
+async function ackSession(sessionId: string): Promise<void> {
+  try {
+    await linearGql(ACK_MUTATION, {
+      input: {
+        sessionId,
+        type: "thought",
+        body: "Starting up...",
+        ephemeral: true,
+      },
+    });
+    console.log(`Acked session ${sessionId}`);
+  } catch (err) {
+    console.error(`Failed to ack session ${sessionId}:`, err);
+  }
+}
+
+async function spawnClaude(event: Record<string, unknown>): Promise<void> {
+  if (!TARGET_REPO) {
+    console.error("WOTERCLIP_REPO not set — cannot spawn Claude session");
+    return;
+  }
+
+  const data = event.data as Record<string, unknown> | undefined;
+  const issueIdentifier = data?.issueIdentifier || data?.issueId || "unknown";
+  const sessionId = data?.id || "unknown";
+  const eventType = event.type as string || "unknown";
+  const action = event.action as string || "unknown";
+
+  const prompt = [
+    `Linear agent event: ${eventType} (${action})`,
+    `Session: ${sessionId}`,
+    `Issue: ${issueIdentifier}`,
+    ``,
+    `Run /heartbeat to process this issue. The agent session is already acknowledged.`,
+  ].join("\n");
+
+  console.log(`Spawning Claude for ${issueIdentifier} (session ${sessionId})`);
+
+  const child = spawn(CLAUDE_BIN, [
+    "-p", prompt,
+    "--allowedTools", "mcp__linear_agent*,Read,Write,Edit,Bash,Grep,Glob,Agent",
+  ], {
+    cwd: TARGET_REPO,
+    stdio: "ignore",
+    detached: true,
+    env: { ...process.env },
+  });
+
+  child.unref(); // Don't wait for child to exit
+
+  child.on("error", (err) => {
+    console.error(`Failed to spawn Claude for ${issueIdentifier}:`, err);
+  });
 }
 
 const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
@@ -57,9 +144,16 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     const filename = `${Date.now()}-${randomUUID()}.json`;
     await writeFile(join(EVENTS_DIR, filename), JSON.stringify(enriched, null, 2), { mode: 0o600 });
 
-    console.log(`Event received: ${event.type || "unknown"} → ${filename}`);
+    console.log(`Event received: ${event.type || "unknown"} (${event.action || "?"}) → ${filename}`);
     res.writeHead(200);
     res.end("OK");
+
+    // Post-response: ack and spawn (non-blocking, errors logged but not thrown)
+    const isSessionEvent = event.type === "AgentSessionEvent" && event.action === "created";
+    if (isSessionEvent && event.data?.id) {
+      await ackSession(event.data.id as string);
+      spawnClaude(event).catch((err) => console.error("Spawn error:", err));
+    }
   } catch (err) {
     console.error("Failed to process webhook:", err);
     res.writeHead(500);
