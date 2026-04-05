@@ -57,13 +57,13 @@ const ACK_MUTATION = `
   }
 `;
 
-async function ackSession(sessionId: string): Promise<void> {
+async function ackSession(sessionId: string, message = "Starting up..."): Promise<void> {
   try {
     await linearGql(ACK_MUTATION, {
       input: {
         sessionId,
         type: "thought",
-        body: "Starting up...",
+        body: message,
         ephemeral: true,
       },
     });
@@ -85,13 +85,25 @@ async function spawnClaude(event: Record<string, unknown>): Promise<void> {
   const eventType = event.type as string || "unknown";
   const action = event.action as string || "unknown";
 
-  const prompt = [
+  const promptBody = (data?.agentActivity as Record<string, unknown> | undefined)?.body as string | undefined;
+  const promptContext = data?.promptContext as string | undefined;
+
+  const lines = [
     `Linear agent event: ${eventType} (${action})`,
     `Session: ${sessionId}`,
     `Issue: ${issueIdentifier}`,
-    ``,
-    `Run /heartbeat to process this issue. The agent session is already acknowledged.`,
-  ].join("\n");
+  ];
+
+  if (promptBody) {
+    lines.push(``, `User message: ${promptBody}`);
+  }
+  if (promptContext) {
+    lines.push(``, `Context:`, promptContext);
+  }
+
+  lines.push(``, `Run /heartbeat to process this issue. The agent session is already acknowledged.`);
+
+  const prompt = lines.join("\n");
 
   console.log(`Spawning Claude for ${issueIdentifier} (session ${sessionId})`);
 
@@ -149,10 +161,18 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     res.end("OK");
 
     // Post-response: ack and spawn (non-blocking, errors logged but not thrown)
-    const isSessionEvent = event.type === "AgentSessionEvent" && event.action === "created";
-    if (isSessionEvent && event.data?.id) {
-      await ackSession(event.data.id as string);
-      spawnClaude(event).catch((err) => console.error("Spawn error:", err));
+    if (event.type === "AgentSessionEvent" && event.data?.id) {
+      const sessionId = event.data.id as string;
+
+      if (event.action === "created") {
+        // New delegation — ack immediately, spawn Claude to do the work
+        await ackSession(sessionId, "Starting up...");
+        spawnClaude(event).catch((err) => console.error("Spawn error:", err));
+      } else if (event.action === "prompted") {
+        // User message in existing session — ack immediately, spawn Claude to respond
+        await ackSession(sessionId, "Reading your message...");
+        spawnClaude(event).catch((err) => console.error("Spawn error:", err));
+      }
     }
   } catch (err) {
     console.error("Failed to process webhook:", err);
