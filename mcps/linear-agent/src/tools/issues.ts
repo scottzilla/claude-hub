@@ -111,84 +111,65 @@ export function registerIssueTools(server: McpServer) {
   );
 
   server.registerTool(
-    "linear_create_issue",
+    "linear_save_issue",
     {
-      description: "Create a new Linear issue. Use stateName for convenience (auto-resolves to state ID).",
+      description: "Create or update a Linear issue. If issueId is provided, updates the existing issue. If omitted, creates a new issue (teamId + title required). Use stateName for convenience (auto-resolves to state ID). delegateId accepts 'me' (this app) or null (clear).",
       inputSchema: {
-        teamId: z.string().describe("Team ID (required)"),
-        title: z.string().describe("Issue title"),
+        issueId: z.string().optional().describe("Issue ID or identifier to update. Omit to create a new issue."),
+        teamId: z.string().optional().describe("Team ID (required for create, optional for update — needed for stateName resolution)"),
+        title: z.string().optional().describe("Issue title (required for create)"),
         description: z.string().optional().describe("Issue description (markdown)"),
-        stateName: z.string().optional().describe("State name (e.g. 'Todo'). Auto-resolves to ID."),
+        stateName: z.string().optional().describe("State name (e.g. 'In Progress'). Auto-resolves to ID."),
+        stateId: z.string().optional().describe("State ID (takes precedence over stateName)"),
         priority: z.number().optional().describe("Priority: 0=none, 1=urgent, 2=high, 3=medium, 4=low"),
-        assigneeId: z.string().optional().describe("Assignee user ID"),
-        delegateId: z.string().optional().describe("Delegate (agent) ID. Use 'me' for this app."),
+        assigneeId: z.string().nullable().optional().describe("Assignee user ID, or null to clear"),
+        delegateId: z.string().nullable().optional().describe("Delegate ID, 'me' for this app, or null to clear"),
         labelIds: z.array(z.string()).optional().describe("Label IDs to apply"),
         parentId: z.string().optional().describe("Parent issue ID (creates sub-issue)"),
         projectId: z.string().optional().describe("Project ID"),
       },
     },
     async (args) => {
-      const input: Record<string, unknown> = {
-        teamId: args.teamId,
-        title: args.title,
-      };
-      if (args.description) input.description = args.description;
-      if (args.stateName) input.stateId = await resolveStateName(args.teamId, args.stateName);
-      if (args.priority !== undefined) input.priority = args.priority;
-      if (args.assigneeId) input.assigneeId = args.assigneeId;
-      if (args.delegateId) input.delegateId = args.delegateId;
-      if (args.labelIds) input.labelIds = args.labelIds;
-      if (args.parentId) input.parentId = args.parentId;
-      if (args.projectId) input.projectId = args.projectId;
+      const isUpdate = !!args.issueId;
 
-      const data = await gql<{ issueCreate: { success: boolean; issue: unknown } }>(
-        CREATE_ISSUE_MUTATION,
-        { input },
-      );
-      return { content: [{ type: "text" as const, text: JSON.stringify(data.issueCreate.issue, null, 2) }] };
-    },
-  );
-
-  server.registerTool(
-    "linear_update_issue",
-    {
-      description: "Update a Linear issue. Use stateName for convenience. delegateId accepts 'me' (this app) or null (clear delegate).",
-      inputSchema: {
-        issueId: z.string().describe("Issue ID or identifier"),
-        title: z.string().optional().describe("New title"),
-        description: z.string().optional().describe("New description (markdown)"),
-        stateName: z.string().optional().describe("State name (e.g. 'In Progress'). Auto-resolves to ID."),
-        stateId: z.string().optional().describe("State ID (takes precedence over stateName)"),
-        priority: z.number().optional().describe("Priority: 0=none, 1=urgent, 2=high, 3=medium, 4=low"),
-        assigneeId: z.string().nullable().optional().describe("Assignee user ID, or null to clear"),
-        delegateId: z.string().nullable().optional().describe("Delegate ID, 'me' for this app, or null to clear"),
-        labelIds: z.array(z.string()).optional().describe("Label IDs (replaces all labels)"),
-        parentId: z.string().optional().describe("Parent issue ID"),
-        teamId: z.string().optional().describe("Team ID (needed for stateName resolution if not already cached)"),
-      },
-    },
-    async (args) => {
       const input: Record<string, unknown> = {};
       if (args.title) input.title = args.title;
       if (args.description) input.description = args.description;
       if (args.stateId) {
         input.stateId = args.stateId;
-      } else if (args.stateName && args.teamId) {
-        input.stateId = await resolveStateName(args.teamId, args.stateName);
       } else if (args.stateName) {
-        throw new Error("teamId is required when using stateName (needed to resolve state ID)");
+        const teamId = args.teamId;
+        if (!teamId) {
+          throw new Error("teamId is required when using stateName (needed to resolve state ID)");
+        }
+        input.stateId = await resolveStateName(teamId, args.stateName);
       }
       if (args.priority !== undefined) input.priority = args.priority;
       if (args.assigneeId !== undefined) input.assigneeId = args.assigneeId;
       if (args.delegateId !== undefined) input.delegateId = args.delegateId;
       if (args.labelIds) input.labelIds = args.labelIds;
       if (args.parentId) input.parentId = args.parentId;
+      if (args.projectId) input.projectId = args.projectId;
 
-      const data = await gql<{ issueUpdate: { success: boolean; issue: unknown } }>(
-        UPDATE_ISSUE_MUTATION,
-        { id: args.issueId, input },
-      );
-      return { content: [{ type: "text" as const, text: JSON.stringify(data.issueUpdate.issue, null, 2) }] };
+      if (isUpdate) {
+        const data = await gql<{ issueUpdate: { success: boolean; issue: unknown } }>(
+          UPDATE_ISSUE_MUTATION,
+          { id: args.issueId, input },
+        );
+        return { content: [{ type: "text" as const, text: JSON.stringify(data.issueUpdate.issue, null, 2) }] };
+      } else {
+        if (!args.teamId || !args.title) {
+          throw new Error("teamId and title are required when creating a new issue");
+        }
+        input.teamId = args.teamId;
+        if (!input.title) input.title = args.title;
+
+        const data = await gql<{ issueCreate: { success: boolean; issue: unknown } }>(
+          CREATE_ISSUE_MUTATION,
+          { input },
+        );
+        return { content: [{ type: "text" as const, text: JSON.stringify(data.issueCreate.issue, null, 2) }] };
+      }
     },
   );
 }
