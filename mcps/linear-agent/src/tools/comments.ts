@@ -32,6 +32,14 @@ const CREATE_COMMENT_MUTATION = `
   }
 `;
 
+const DELETE_COMMENT_MUTATION = `
+  mutation DeleteComment($id: String!) {
+    commentDelete(id: $id) {
+      success
+    }
+  }
+`;
+
 export function registerCommentTools(server: McpServer) {
   server.registerTool(
     "linear_list_comments",
@@ -66,6 +74,23 @@ export function registerCommentTools(server: McpServer) {
         { input: { issueId: args.issueId, body: args.body } },
       );
       return { content: [{ type: "text" as const, text: JSON.stringify(data.commentCreate.comment, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "linear_delete_comment",
+    {
+      description: "Delete a comment by ID.",
+      inputSchema: {
+        commentId: z.string().describe("Comment ID to delete"),
+      },
+    },
+    async (args) => {
+      const data = await gql<{ commentDelete: { success: boolean } }>(
+        DELETE_COMMENT_MUTATION,
+        { id: args.commentId },
+      );
+      return { content: [{ type: "text" as const, text: JSON.stringify(data.commentDelete, null, 2) }] };
     },
   );
 }
