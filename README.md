@@ -1,6 +1,6 @@
 # scottzilla marketplace
 
-A marketplace of Claude Code plugins for cost-optimized AI task delegation.
+A marketplace of Claude Code plugins and MCP servers for AI task delegation and tool integration.
 
 ## Plugins
 
@@ -37,10 +37,19 @@ The host model handles routing decisions and conversation context. Workers handl
 │       │   └── deep-thinker.md
 │       └── CLAUDE.md
 ├── mcps/
-│   └── claude-dispatch/          # Optional MCP server (standalone)
+│   ├── claude-dispatch/          # Cost-tiered worker MCP (standalone)
+│   │   ├── src/
+│   │   ├── dist/
+│   │   ├── .mcp.json
+│   │   └── package.json
+│   └── linear-agent/             # Linear API with agent features (actor=app)
 │       ├── src/
-│       ├── dist/
-│       ├── .mcp.json
+│       │   ├── tools/            # 26 MCP tools
+│       │   ├── auth.ts           # OAuth token manager
+│       │   ├── graphql.ts        # Linear GraphQL client
+│       │   └── server.ts         # MCP entry point
+│       ├── webhook/
+│       │   └── receiver.ts       # Webhook listener + Claude spawner
 │       └── package.json
 ├── CLAUDE.md
 ├── README.md
@@ -67,7 +76,9 @@ No `--plugin-dir` equivalent in Desktop settings. Two options:
 1. **CLI bridge** — Load with `claude --plugin-dir .../plugins/claude-dispatch`, then `/desktop` to move the session to Desktop.
 2. **Marketplace install** — Add this repo as a marketplace in the Desktop UI: **+** → **Plugins** → **Add plugin** → enter the repo URL.
 
-## MCP server (optional)
+## MCP Servers
+
+### claude-dispatch (optional)
 
 The `mcps/claude-dispatch/` directory contains a standalone MCP server that exposes the same three tiers as text-only tools (`quick_task`, `code_task`, `deep_think`). This is separate from the plugin and requires an `ANTHROPIC_API_KEY` since it calls the Anthropic API directly.
 
@@ -78,7 +89,7 @@ cd mcps/claude-dispatch
 npm install
 ```
 
-Then add to your `claude_desktop_config.json`:
+Then add to your `.mcp.json` or `claude_desktop_config.json`:
 
 ```json
 {
@@ -93,6 +104,71 @@ Then add to your `claude_desktop_config.json`:
   }
 }
 ```
+
+### linear-agent
+
+Custom MCP server for Linear's API with `actor=app` OAuth authentication. Enables features the built-in Linear MCP doesn't support: delegate-based issue locking, agent sessions, agent activities, and webhook event consumption.
+
+**26 tools** covering issues, comments, labels, teams, users, documents, agent sessions, issue relations, workflow states, and webhook events.
+
+Primary consumer: [WoterClip](https://github.com/scottzilla/woterclip) (Linear-backed agent orchestration plugin).
+
+#### Setup
+
+1. Create a Linear OAuth app at [linear.app/settings/api/applications](https://linear.app/settings/api/applications) with scopes: `read`, `write`, `app:assignable`, `app:mentionable`. Set actor to `app`.
+
+2. Install and build:
+   ```bash
+   cd mcps/linear-agent
+   npm install
+   npm run build
+   ```
+
+3. Add to your `.mcp.json`:
+   ```json
+   {
+     "mcpServers": {
+       "linear-agent": {
+         "command": "node",
+         "args": ["/absolute/path/to/mcps/linear-agent/dist/server.js"],
+         "env": {
+           "LINEAR_CLIENT_ID": "your_client_id",
+           "LINEAR_CLIENT_SECRET": "your_client_secret"
+         }
+       }
+     }
+   }
+   ```
+
+#### Webhook receiver (optional)
+
+For real-time Linear agent events (delegation, user messages in sessions):
+
+```bash
+# Start the receiver
+LINEAR_WEBHOOK_SECRET=your_secret WOTERCLIP_REPO=/path/to/repo npm run webhook
+
+# Expose via tunnel (separate terminal)
+cloudflared tunnel --url http://localhost:3847
+```
+
+Register the tunnel URL as a webhook in Linear (Settings → API → Webhooks → `AgentSessionEvent`). The receiver validates HMAC signatures, acknowledges agent sessions within seconds, and spawns Claude Code sessions to do the work.
+
+#### Tools
+
+| Category | Tools |
+|----------|-------|
+| Issues | `save_issue`, `list_issues`, `get_issue` |
+| Relations | `set_relation`, `remove_relation` |
+| Comments | `list_comments`, `create_comment`, `delete_comment` |
+| Labels | `list_labels`, `create_label` |
+| Teams/Users | `list_teams`, `list_users`, `get_user`, `get_viewer` |
+| Documents | `search_documents`, `get_document`, `list_documents`, `create_document`, `update_document`, `get_attachment` |
+| Agent Sessions | `create_session`, `update_session`, `create_activity` |
+| Events | `poll_events`, `get_webhook_status` |
+| States | `list_states` |
+
+All tool names are prefixed with `linear_` (e.g., `mcp__linear_agent__linear_save_issue`).
 
 ## Adding a new plugin
 
