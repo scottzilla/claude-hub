@@ -50,6 +50,37 @@ const GET_ATTACHMENTS_QUERY = `
   }
 `;
 
+const CREATE_DOCUMENT_MUTATION = `
+  mutation CreateDocument($input: DocumentCreateInput!) {
+    documentCreate(input: $input) {
+      success
+      document { id title createdAt }
+    }
+  }
+`;
+
+const UPDATE_DOCUMENT_MUTATION = `
+  mutation UpdateDocument($id: String!, $input: DocumentUpdateInput!) {
+    documentUpdate(id: $id, input: $input) {
+      success
+      document { id title updatedAt }
+    }
+  }
+`;
+
+const LIST_DOCUMENTS_QUERY = `
+  query ListDocuments($first: Int) {
+    documents(first: $first) {
+      nodes {
+        id
+        title
+        project { id name }
+        updatedAt
+      }
+    }
+  }
+`;
+
 export function registerDocumentTools(server: McpServer) {
   server.registerTool(
     "linear_search_documents",
@@ -93,6 +124,69 @@ export function registerDocumentTools(server: McpServer) {
         { issueId: args.issueId },
       );
       return { content: [{ type: "text" as const, text: JSON.stringify(data.issue.attachments.nodes, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "linear_create_document",
+    {
+      description: "Create a new project document in Linear.",
+      inputSchema: {
+        title: z.string().describe("Document title"),
+        content: z.string().optional().describe("Document content (markdown)"),
+        projectId: z.string().optional().describe("Project ID to associate with"),
+      },
+    },
+    async (args) => {
+      const input: Record<string, unknown> = { title: args.title };
+      if (args.content) input.content = args.content;
+      if (args.projectId) input.projectId = args.projectId;
+
+      const data = await gql<{ documentCreate: { success: boolean; document: unknown } }>(
+        CREATE_DOCUMENT_MUTATION,
+        { input },
+      );
+      return { content: [{ type: "text" as const, text: JSON.stringify(data.documentCreate.document, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "linear_update_document",
+    {
+      description: "Update an existing project document.",
+      inputSchema: {
+        documentId: z.string().describe("Document ID"),
+        title: z.string().optional().describe("New title"),
+        content: z.string().optional().describe("New content (markdown)"),
+      },
+    },
+    async (args) => {
+      const input: Record<string, unknown> = {};
+      if (args.title) input.title = args.title;
+      if (args.content) input.content = args.content;
+
+      const data = await gql<{ documentUpdate: { success: boolean; document: unknown } }>(
+        UPDATE_DOCUMENT_MUTATION,
+        { id: args.documentId, input },
+      );
+      return { content: [{ type: "text" as const, text: JSON.stringify(data.documentUpdate.document, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "linear_list_documents",
+    {
+      description: "List project documents. Returns title, project, and update time.",
+      inputSchema: {
+        first: z.number().optional().default(20).describe("Max results (default 20)"),
+      },
+    },
+    async (args) => {
+      const data = await gql<{ documents: { nodes: unknown[] } }>(
+        LIST_DOCUMENTS_QUERY,
+        { first: args.first },
+      );
+      return { content: [{ type: "text" as const, text: JSON.stringify(data.documents.nodes, null, 2) }] };
     },
   );
 }
