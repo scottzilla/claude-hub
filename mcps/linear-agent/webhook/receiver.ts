@@ -85,7 +85,8 @@ async function spawnClaude(event: Record<string, unknown>): Promise<void> {
   const eventType = event.type as string || "unknown";
   const action = event.action as string || "unknown";
 
-  const promptBody = (data?.agentActivity as Record<string, unknown> | undefined)?.body as string | undefined;
+  const activity = data?.agentActivity as Record<string, unknown> | undefined;
+  const promptBody = activity?.body as string | undefined;
   const promptContext = data?.promptContext as string | undefined;
 
   const lines = [
