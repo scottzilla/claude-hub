@@ -1,0 +1,91 @@
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import { homedir } from "node:os";
+
+interface TokenData {
+  access_token: string;
+  expires_at: string;
+}
+
+const AGENT_DIR = process.env.LINEAR_AGENT_DIR || join(homedir(), ".linear-agent");
+const TOKEN_PATH = join(AGENT_DIR, "token.json");
+const TOKEN_ENDPOINT = "https://api.linear.app/oauth/token";
+const REFRESH_BUFFER_MS = 60 * 60 * 1000;
+
+let cachedToken: TokenData | null = null;
+
+async function ensureDir(): Promise<void> {
+  await mkdir(AGENT_DIR, { recursive: true, mode: 0o700 });
+}
+
+async function loadCachedToken(): Promise<TokenData | null> {
+  try {
+    const raw = await readFile(TOKEN_PATH, "utf-8");
+    return JSON.parse(raw) as TokenData;
+  } catch {
+    return null;
+  }
+}
+
+async function persistToken(token: TokenData): Promise<void> {
+  await ensureDir();
+  await writeFile(TOKEN_PATH, JSON.stringify(token, null, 2), { mode: 0o600 });
+}
+
+async function requestToken(): Promise<TokenData> {
+  const clientId = process.env.LINEAR_CLIENT_ID;
+  const clientSecret = process.env.LINEAR_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    throw new Error(
+      "LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET must be set. " +
+      "Create an OAuth app at https://linear.app/settings/api/applications"
+    );
+  }
+
+  const res = await fetch(TOKEN_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: clientId,
+      client_secret: clientSecret,
+      actor: "app",
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Token request failed (${res.status}): ${body}`);
+  }
+
+  const data = await res.json() as { access_token: string; expires_in: number };
+  const token: TokenData = {
+    access_token: data.access_token,
+    expires_at: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+  };
+
+  await persistToken(token);
+  return token;
+}
+
+function isExpiringSoon(token: TokenData): boolean {
+  return new Date(token.expires_at).getTime() - Date.now() < REFRESH_BUFFER_MS;
+}
+
+export async function getAccessToken(): Promise<string> {
+  if (cachedToken && !isExpiringSoon(cachedToken)) {
+    return cachedToken.access_token;
+  }
+
+  const stored = await loadCachedToken();
+  if (stored && !isExpiringSoon(stored)) {
+    cachedToken = stored;
+    return stored.access_token;
+  }
+
+  cachedToken = await requestToken();
+  return cachedToken.access_token;
+}
+
+export { AGENT_DIR };
