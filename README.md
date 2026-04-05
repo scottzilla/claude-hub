@@ -7,6 +7,7 @@ A marketplace of Claude Code plugins and MCP servers for AI task delegation and 
 | Plugin | Description |
 |---|---|
 | [`claude-dispatch`](./plugins/claude-dispatch/) | Routes tasks to Haiku, Sonnet, or Opus based on complexity |
+| [`scottclip`](./plugins/scottclip/) | Linear-backed agent orchestration with persona-based task routing |
 
 ## How it works
 
@@ -111,7 +112,7 @@ Custom MCP server for Linear's API with `actor=app` OAuth authentication. Enable
 
 **26 tools** covering issues, comments, labels, teams, users, documents, agent sessions, issue relations, workflow states, and webhook events.
 
-Primary consumer: [WoterClip](https://github.com/scottzilla/woterclip) (Linear-backed agent orchestration plugin).
+Primary consumer: [ScottClip](https://github.com/scottzilla/scottclip) (Linear-backed agent orchestration plugin).
 
 #### Setup
 
@@ -146,7 +147,7 @@ For real-time Linear agent events (delegation, user messages in sessions):
 
 ```bash
 # Start the receiver
-LINEAR_WEBHOOK_SECRET=your_secret WOTERCLIP_REPO=/path/to/repo npm run webhook
+LINEAR_WEBHOOK_SECRET=your_secret SCOTTCLIP_REPO=/path/to/repo npm run webhook
 
 # Expose via tunnel (separate terminal)
 cloudflared tunnel --url http://localhost:3847

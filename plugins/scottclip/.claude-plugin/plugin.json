@@ -1,0 +1,11 @@
+{
+  "name": "scottclip",
+  "version": "0.6.0",
+  "description": "Linear-backed agent orchestration with persona-based task routing for Claude Code",
+  "author": {
+    "name": "Scott Nowicki"
+  },
+  "repository": "https://github.com/scottzilla/scottclip",
+  "license": "MIT",
+  "keywords": ["linear", "agent", "orchestration", "persona", "heartbeat"]
+}
