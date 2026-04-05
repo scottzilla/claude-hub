@@ -1,0 +1,71 @@
+import { z } from "zod";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { gql } from "../graphql.js";
+
+const LIST_COMMENTS_QUERY = `
+  query ListComments($issueId: String!, $first: Int, $after: String) {
+    issue(id: $issueId) {
+      comments(first: $first, after: $after, orderBy: createdAt) {
+        nodes {
+          id
+          body
+          user { id name }
+          createdAt
+          updatedAt
+        }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+`;
+
+const CREATE_COMMENT_MUTATION = `
+  mutation CreateComment($input: CommentCreateInput!) {
+    commentCreate(input: $input) {
+      success
+      comment {
+        id
+        body
+        createdAt
+      }
+    }
+  }
+`;
+
+export function registerCommentTools(server: McpServer) {
+  server.registerTool(
+    "linear_list_comments",
+    {
+      description: "List comments on a Linear issue, ordered by creation time.",
+      inputSchema: {
+        issueId: z.string().describe("Issue ID or identifier"),
+        first: z.number().optional().default(20).describe("Max results (default 20)"),
+      },
+    },
+    async (args) => {
+      const data = await gql<{
+        issue: { comments: { nodes: unknown[]; pageInfo: { hasNextPage: boolean; endCursor: string } } };
+      }>(LIST_COMMENTS_QUERY, { issueId: args.issueId, first: args.first });
+
+      return { content: [{ type: "text" as const, text: JSON.stringify(data.issue.comments, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "linear_create_comment",
+    {
+      description: "Post a comment on a Linear issue. Supports markdown.",
+      inputSchema: {
+        issueId: z.string().describe("Issue ID or identifier"),
+        body: z.string().describe("Comment body (markdown supported)"),
+      },
+    },
+    async (args) => {
+      const data = await gql<{ commentCreate: { success: boolean; comment: unknown } }>(
+        CREATE_COMMENT_MUTATION,
+        { input: { issueId: args.issueId, body: args.body } },
+      );
+      return { content: [{ type: "text" as const, text: JSON.stringify(data.commentCreate.comment, null, 2) }] };
+    },
+  );
+}
