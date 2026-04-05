@@ -8,7 +8,9 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/server.ts",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "webhook": "tsx webhook/receiver.ts",
+    "webhook:tunnel": "cloudflared tunnel --url http://localhost:3847"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
