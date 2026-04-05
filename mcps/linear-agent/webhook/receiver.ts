@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createHmac, randomUUID } from "node:crypto";
 import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -25,7 +25,7 @@ async function ensureEventsDir() {
   await mkdir(EVENTS_DIR, { recursive: true, mode: 0o700 });
 }
 
-const server = createServer(async (req, res) => {
+const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   if (req.method !== "POST") {
     res.writeHead(405);
     res.end("Method not allowed");
