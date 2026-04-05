@@ -30,7 +30,7 @@ registerStateTools(server);
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("linear-agent MCP server running on stdio (22 tools registered)");
+  console.error("linear-agent MCP server running on stdio (26 tools registered)");
 }
 
 main().catch((error) => {
