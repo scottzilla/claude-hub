@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 interface TokenData {
   access_token: string;
   expires_at: string;
+  refresh_token?: string; // Present for authorization_code tokens, absent for client_credentials
 }
 
 const AGENT_DIR = process.env.LINEAR_AGENT_DIR || join(homedir(), ".linear-agent");
@@ -98,15 +99,58 @@ export async function exchangeAuthCode(code: string, redirectUri: string): Promi
     throw new Error(`Token exchange failed (${res.status}): ${body}`);
   }
 
-  const data = await res.json() as { access_token: string; expires_in: number };
+  const data = await res.json() as { access_token: string; expires_in: number; refresh_token?: string };
   const token: TokenData = {
     access_token: data.access_token,
     expires_at: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+    ...(data.refresh_token && { refresh_token: data.refresh_token }),
   };
 
   await persistToken(token);
   cachedToken = token;
   return token;
+}
+
+async function refreshToken(token: TokenData): Promise<TokenData> {
+  if (!token.refresh_token) {
+    throw new Error("No refresh token available");
+  }
+
+  const clientId = process.env.LINEAR_CLIENT_ID;
+  const clientSecret = process.env.LINEAR_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    throw new Error("LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET must be set.");
+  }
+
+  const res = await fetch(TOKEN_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: token.refresh_token,
+      client_id: clientId,
+      client_secret: clientSecret,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Token refresh failed (${res.status}): ${body}`);
+  }
+
+  const data = await res.json() as { access_token: string; expires_in: number; refresh_token?: string };
+  const newToken: TokenData = {
+    access_token: data.access_token,
+    expires_at: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+    // Use new refresh token if provided, otherwise keep the old one
+    refresh_token: data.refresh_token || token.refresh_token,
+  };
+
+  await persistToken(newToken);
+  cachedToken = newToken;
+  console.error("Token refreshed successfully");
+  return newToken;
 }
 
 export function getAuthUrl(): string {
@@ -132,16 +176,29 @@ export function getCallbackUrl(): string {
 }
 
 export async function getAccessToken(): Promise<string> {
+  // Check in-memory cache
   if (cachedToken && !isExpiringSoon(cachedToken)) {
     return cachedToken.access_token;
   }
 
+  // Check file cache
   const stored = await loadCachedToken();
   if (stored && !isExpiringSoon(stored)) {
     cachedToken = stored;
     return stored.access_token;
   }
 
+  // Token expired or expiring — try refresh first (authorization_code tokens)
+  if (stored?.refresh_token) {
+    try {
+      const refreshed = await refreshToken(stored);
+      return refreshed.access_token;
+    } catch (err) {
+      console.error("Token refresh failed, falling back to client_credentials:", err);
+    }
+  }
+
+  // Fall back to client_credentials (30-day token, no refresh)
   cachedToken = await requestToken();
   return cachedToken.access_token;
 }
