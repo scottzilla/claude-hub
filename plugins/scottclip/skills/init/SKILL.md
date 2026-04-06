@@ -51,6 +51,7 @@ Ask the user for:
 - **LINEAR_CLIENT_ID** — from the OAuth app
 - **LINEAR_CLIENT_SECRET** — from the OAuth app
 - **LINEAR_WEBHOOK_SECRET** — a secret string for HMAC webhook validation (user can generate one, e.g., `openssl rand -hex 32`)
+- **AGENT_CWD** — the repo directory where Claude spawns on webhook events (pre-fill with the current working directory, let user edit if needed)
 
 Then write the MCP configuration to `.mcp.json` in the repo root (create if it doesn't exist, merge if it does):
 
@@ -64,7 +65,7 @@ Then write the MCP configuration to `.mcp.json` in the repo root (create if it d
         "LINEAR_CLIENT_ID": "<client_id>",
         "LINEAR_CLIENT_SECRET": "<client_secret>",
         "LINEAR_WEBHOOK_SECRET": "<webhook_secret>",
-        "AGENT_CWD": "<absolute-path-to-this-repo>"
+        "AGENT_CWD": "<pre-filled-cwd>"
       }
     }
   }
@@ -74,6 +75,8 @@ Then write the MCP configuration to `.mcp.json` in the repo root (create if it d
 The `<path-to-linear-agent>` should be resolved by checking:
 1. If the user has `claude-hub` cloned locally, use that path (e.g., `~/code/claude-hub/mcps/linear-agent`)
 2. Otherwise, ask the user where the `linear-agent` MCP server is installed
+
+`AGENT_CWD` is pre-filled with the current working directory. Present it to the user for confirmation: "Agent working directory: `/current/path` — press Enter to accept or type a different path."
 
 After writing `.mcp.json`, check if `linear-agent` tools are available:
 
