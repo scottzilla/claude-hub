@@ -34,6 +34,7 @@ If `.scottclip/config.yaml` already exists AND `linear-agent` tools are availabl
 1. Go to [linear.app/settings/api/applications](https://linear.app/settings/api/applications)
 2. Click **New application**
 3. Set the **Callback URL** to: `<LINEAR_CALLBACK_HOST>/oauth/callback` (e.g., `https://your-tunnel.trycloudflare.com/oauth/callback`)
+   The init skill will open this URL in your browser automatically after restart.
 4. After creation, note the **Client ID** and **Client Secret**
 5. The authorization URL will include these query parameters:
    ```
@@ -115,6 +116,44 @@ Ask the user if they want to set up webhook-driven events:
 ### Step 1: Gather Linear Context
 
 > **Resume point:** If the user just restarted after configuring `.mcp.json`, this is where init continues. The linear-agent MCP tools should now be available.
+
+#### Authorize with Linear
+
+Before gathering Linear context, verify the MCP server has a valid token:
+
+1. Check if a token exists by calling `linear_get_viewer`. 
+   - If it succeeds → token is valid, skip to "Gather Linear Context" below.
+   - If it fails with an auth error → need to authorize.
+
+2. Ensure the webhook receiver is running (needed for the OAuth callback):
+   - Run via Bash: `lsof -i :3847 | grep LISTEN` to check if port is in use.
+   - If not running, start it in the background:
+     ```
+     Run via Bash (background): cd <linear-agent-mcp-path> && npm run webhook
+     ```
+   - Wait 2 seconds, verify it started.
+
+3. Construct the authorization URL:
+   ```
+   https://linear.app/oauth/authorize?
+     client_id=<LINEAR_CLIENT_ID from .mcp.json>&
+     redirect_uri=<LINEAR_CALLBACK_HOST>/oauth/callback&
+     response_type=code&
+     scope=read,write,app:assignable,app:mentionable&
+     actor=app
+   ```
+
+4. Open the URL in the user's browser:
+   ```
+   Run via Bash: open "<authorization_url>"
+   ```
+   Tell the user: "Opening Linear authorization in your browser. Approve the app, then come back here."
+
+5. Wait for the token to be saved. Poll by calling `linear_get_viewer` every 3 seconds (up to 60 seconds):
+   - If it succeeds → authorization complete. Report: "✓ Authorized as <app name>"
+   - If it times out → report: "Authorization timed out. Make sure the webhook receiver is running and try again."
+
+#### Gather Linear Context
 
 1. Call `linear_list_teams` to fetch available teams
 2. Call `linear_list_users` to identify the current user
