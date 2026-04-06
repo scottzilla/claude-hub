@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 
+import { Hono } from "hono";
+import { serve } from "@hono/node-server";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { randomUUID } from "node:crypto";
 import { registerIssueTools } from "./tools/issues.js";
 import { registerRelationTools } from "./tools/relations.js";
 import { registerCommentTools } from "./tools/comments.js";
@@ -11,26 +14,124 @@ import { registerDocumentTools } from "./tools/documents.js";
 import { registerSessionTools } from "./tools/sessions.js";
 import { registerEventTools } from "./tools/events.js";
 import { registerStateTools } from "./tools/states.js";
+import { createWebhookRoute } from "./webhook.js";
+import { createOAuthRoute, createStatusRoute } from "./oauth.js";
+import { startPolling, stopPolling } from "./polling.js";
+import { loadDotEnv } from "./env.js";
 
-const server = new McpServer({
+// Load .scottclip/.env before anything reads process.env
+loadDotEnv();
+
+const PORT = parseInt(process.env.WEBHOOK_PORT || "3847", 10);
+const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || "900000", 10); // 15 minutes default
+const POLL_TEAM_ID = process.env.POLL_TEAM_ID || "";
+
+// --- MCP Server Setup ---
+
+const mcpServer = new McpServer({
   name: "linear-agent",
   version: "0.1.0",
 });
 
-registerIssueTools(server);
-registerRelationTools(server);
-registerCommentTools(server);
-registerLabelTools(server);
-registerTeamTools(server);
-registerDocumentTools(server);
-registerSessionTools(server);
-registerEventTools(server);
-registerStateTools(server);
+registerIssueTools(mcpServer);
+registerRelationTools(mcpServer);
+registerCommentTools(mcpServer);
+registerLabelTools(mcpServer);
+registerTeamTools(mcpServer);
+registerDocumentTools(mcpServer);
+registerSessionTools(mcpServer);
+registerEventTools(mcpServer);
+registerStateTools(mcpServer);
+
+// Track active transports by session ID
+const transports = new Map<string, WebStandardStreamableHTTPServerTransport>();
+
+// --- Hono App ---
+
+const app = new Hono();
+
+// MCP Streamable HTTP endpoint
+app.all("/mcp", async (c) => {
+  const sessionId = c.req.header("mcp-session-id");
+
+  if (c.req.method === "GET" || c.req.method === "DELETE") {
+    // GET = SSE stream reconnect, DELETE = session close
+    if (!sessionId || !transports.has(sessionId)) {
+      return c.text("No active session", 400);
+    }
+    const transport = transports.get(sessionId)!;
+    return transport.handleRequest(c.req.raw);
+  }
+
+  // POST — either initialize a new session or send to existing one
+  if (sessionId && transports.has(sessionId)) {
+    const transport = transports.get(sessionId)!;
+    return transport.handleRequest(c.req.raw);
+  }
+
+  // New session
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: () => randomUUID(),
+    onsessioninitialized: (id) => {
+      transports.set(id, transport);
+      console.log(`MCP session initialized: ${id}`);
+    },
+    onsessionclosed: (id) => {
+      transports.delete(id);
+      console.log(`MCP session closed: ${id}`);
+    },
+  });
+
+  await mcpServer.connect(transport);
+  return transport.handleRequest(c.req.raw);
+});
+
+// Webhook endpoint
+app.route("/webhook", createWebhookRoute());
+
+// OAuth endpoint
+app.route("/oauth", createOAuthRoute());
+
+// Status page
+app.route("/", createStatusRoute());
+
+// --- Start Server ---
 
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("linear-agent MCP server running on stdio (26 tools registered)");
+  serve(
+    {
+      fetch: app.fetch,
+      port: PORT,
+    },
+    (info) => {
+      console.log(`ScottClip linear-agent server listening on port ${info.port}`);
+      console.log(`  MCP:     http://localhost:${info.port}/mcp`);
+      console.log(`  Webhook: http://localhost:${info.port}/webhook`);
+      console.log(`  OAuth:   http://localhost:${info.port}/oauth/callback`);
+      console.log(`  Status:  http://localhost:${info.port}/`);
+    }
+  );
+
+  // Start polling if configured
+  if (POLL_TEAM_ID && POLL_INTERVAL > 0) {
+    startPolling(POLL_TEAM_ID, POLL_INTERVAL);
+  } else if (!POLL_TEAM_ID) {
+    console.log("Polling disabled: POLL_TEAM_ID not set");
+  }
+
+  // Graceful shutdown
+  const shutdown = () => {
+    console.log("Shutting down...");
+    stopPolling();
+    for (const [id, transport] of transports) {
+      transport.close?.();
+      transports.delete(id);
+    }
+    process.exit(0);
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }
 
 main().catch((error) => {
