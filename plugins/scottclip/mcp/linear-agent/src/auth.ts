@@ -1,6 +1,5 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { homedir } from "node:os";
 
 interface TokenData {
   access_token: string;
@@ -8,7 +7,8 @@ interface TokenData {
   refresh_token?: string; // Present for authorization_code tokens, absent for client_credentials
 }
 
-const AGENT_DIR = process.env.LINEAR_AGENT_DIR || (process.env.AGENT_CWD ? join(process.env.AGENT_CWD, ".scottclip") : join(homedir(), ".scottclip"));
+// Fall back to cwd (where the server was started) if AGENT_CWD isn't set yet
+const AGENT_DIR = process.env.LINEAR_AGENT_DIR || (process.env.AGENT_CWD ? join(process.env.AGENT_CWD, ".scottclip") : join(process.cwd(), ".scottclip"));
 export const TOKEN_PATH = join(AGENT_DIR, "token.json");
 const TOKEN_ENDPOINT = "https://api.linear.app/oauth/token";
 const REFRESH_BUFFER_MS = 60 * 60 * 1000;

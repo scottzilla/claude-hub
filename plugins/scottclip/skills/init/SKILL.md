@@ -98,7 +98,12 @@ Agent working directory: /current/path — press Enter to accept or type a diffe
 
 The MCP tools won't be available until after a restart. But we can still authorize now by starting the consolidated server directly.
 
-1. Stop any existing process on port 3847 and start a fresh server:
+1. Create the `.scottclip` directory if it doesn't exist:
+   ```
+   Run via Bash: mkdir -p .scottclip
+   ```
+
+2. Stop any existing process on port 3847 and start a fresh server:
    ```
    Run via Bash (background): cd <resolved_plugin_root>/mcp/linear-agent && npm run start
    ```
