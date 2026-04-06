@@ -100,14 +100,9 @@ Agent working directory: /current/path — press Enter to accept or type a diffe
 
 The MCP tools won't be available until after a restart. But we can still authorize now by starting the receiver directly.
 
-1. Kill any existing receiver (may be running stale code from a previous init):
+1. Stop any existing receiver and start a fresh one:
    ```
-   Run via Bash: lsof -i :3847 -t | xargs kill 2>/dev/null; sleep 1
-   ```
-
-2. Start a fresh receiver with the credentials we just collected:
-   ```
-   Run via Bash (background): cd <resolved_plugin_root>/mcp/linear-agent && LINEAR_CLIENT_ID=<client_id> LINEAR_CLIENT_SECRET=<client_secret> LINEAR_CALLBACK_HOST=<tunnel_hostname> AGENT_CWD=<agent_cwd> npm run webhook
+   Run via Bash (background): cd <resolved_plugin_root>/mcp/linear-agent && LINEAR_CLIENT_ID=<client_id> LINEAR_CLIENT_SECRET=<client_secret> LINEAR_CALLBACK_HOST=<tunnel_hostname> AGENT_CWD=<agent_cwd> npm run webhook:restart
    ```
    Wait 2 seconds, verify it started with `lsof -i :3847`.
 

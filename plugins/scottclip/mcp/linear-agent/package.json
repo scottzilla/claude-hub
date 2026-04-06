@@ -10,7 +10,9 @@
     "dev": "tsx src/server.ts",
     "prepare": "npm run build",
     "webhook": "tsx webhook/receiver.ts",
-    "webhook:tunnel": "cloudflared tunnel --url http://localhost:3847"
+    "webhook:stop": "lsof -i :${WEBHOOK_PORT:-3847} -t | xargs kill 2>/dev/null || true",
+    "webhook:restart": "npm run webhook:stop && npm run webhook",
+    "webhook:tunnel": "cloudflared tunnel --url http://localhost:${WEBHOOK_PORT:-3847}"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
