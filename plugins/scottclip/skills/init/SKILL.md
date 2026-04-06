@@ -1,169 +1,170 @@
 ---
 name: scottclip-init
 description: This skill should be used when the user asks to "initialize scottclip", "set up scottclip", "scottclip init", "configure scottclip for this repo", or runs the /scottclip-init command. Scaffolds a repo with ScottClip config, persona directories, and Linear labels.
-version: 0.1.0
+version: 0.2.0
 ---
 
 # ScottClip Initialization
 
-Initialize ScottClip in the current repository. This creates the `.scottclip/` directory with config, persona templates, and corresponding Linear labels.
+Initialize ScottClip in the current repository. Creates `.mcp.json` (MCP server config), authorizes with Linear via OAuth, and scaffolds `.scottclip/` with config, persona templates, and Linear labels.
 
-## Prerequisites
-
-### Linear Agent MCP Server
-
-ScottClip requires the `linear-agent` MCP server for OAuth `actor=app` authentication, which enables delegate-based locking and agent sessions.
-
-#### Resume Detection
-
-If `.mcp.json` exists and contains a `linear-agent` entry but the tools aren't available yet, the user likely needs to restart their Claude Code session. Report:
+## Flow Overview
 
 ```
-.mcp.json is configured with linear-agent, but the MCP tools aren't loaded yet.
-Please restart your Claude Code session and re-run /scottclip-init to continue.
+Phase 1 (first run):  Collect credentials → Write .mcp.json → Start receiver → Browser auth → Restart
+Phase 2 (after restart): Verify auth → Pick team → Choose personas → Create labels → Scaffold config → Done
 ```
 
-If `.scottclip/config.yaml` already exists AND `linear-agent` tools are available, this is a re-initialization — skip to the "Re-initialization" section at the bottom.
+Phase 1 and Phase 2 are both handled by `/scottclip-init`. The skill detects which phase to run based on current state.
 
-1. Check if `linear-agent` tools are available (any tool starting with `mcp__linear_agent__`).
-2. If available, skip to the Initialization Procedure.
-3. If not available, guide the user through setup:
+## State Detection
 
-#### Create a Linear OAuth App
+Run these checks at the start to determine where to resume:
 
-1. Go to [linear.app/settings/api/applications](https://linear.app/settings/api/applications)
-2. Click **New application**
-3. Set the **Callback URL** to: `<LINEAR_CALLBACK_HOST>/oauth/callback` (e.g., `https://your-tunnel.trycloudflare.com/oauth/callback`)
-   The init skill will open this URL in your browser automatically after restart.
-4. After creation, note the **Client ID** and **Client Secret**
-5. The authorization URL will include these query parameters:
+1. **`.scottclip/config.yaml` exists AND `linear-agent` tools available** → this is a re-initialization. Skip to the "Re-initialization" section at the bottom.
+
+2. **`.mcp.json` has `linear-agent` entry AND tools are available** → Phase 1 is done. Jump to **Phase 2**.
+
+3. **`.mcp.json` has `linear-agent` entry BUT tools NOT available** → `.mcp.json` was written but session hasn't restarted. Report:
    ```
-   https://linear.app/oauth/authorize?
-     client_id=YOUR_CLIENT_ID&
-     redirect_uri=http://localhost:3847/oauth/callback&
-     response_type=code&
-     scope=read,write,app:assignable,app:mentionable&
-     actor=app
+   .mcp.json is configured but the MCP server isn't loaded yet.
+   Restart Claude Code and re-run /scottclip-init.
+   ```
+   Stop.
+
+4. **No `linear-agent` in `.mcp.json` (or no `.mcp.json`)** → Fresh start. Run **Phase 1**.
+
+---
+
+## Phase 1: Connect to Linear
+
+### Step 1: Collect Credentials
+
+Ask the user for these values, one at a time:
+
+1. **Tunnel hostname** — the publicly accessible URL where the webhook receiver and OAuth callback will be reachable.
+   ```
+   Enter your tunnel hostname (e.g., https://my-tunnel.trycloudflare.com):
+   ```
+   This is the base URL for both the OAuth callback and Linear webhooks. The user should have a tunnel running (cloudflared, ngrok, Tailscale Funnel, etc.) or plan to set one up.
+
+2. **Linear Client ID** — from the Linear OAuth app.
+   ```
+   If you haven't created a Linear OAuth app yet:
+     1. Go to linear.app/settings/api/applications
+     2. Click "New application"
+     3. Set Callback URL to: <tunnel_hostname>/oauth/callback
+     4. Note the Client ID and Client Secret
+
+   Enter your Linear Client ID:
    ```
 
-#### Configure the MCP Server
+3. **Linear Client Secret** —
+   ```
+   Enter your Linear Client Secret:
+   ```
 
-Ask the user for:
-- **LINEAR_CLIENT_ID** — from the OAuth app
-- **LINEAR_CLIENT_SECRET** — from the OAuth app
-- **LINEAR_WEBHOOK_SECRET** — a secret string for HMAC webhook validation (user can generate one, e.g., `openssl rand -hex 32`)
-- **LINEAR_CALLBACK_HOST** — the public hostname for OAuth callback and webhooks (e.g., `https://your-tunnel.trycloudflare.com`). This must match the Callback URL registered on the Linear OAuth app. Default: `http://localhost:3847` (local development only).
-- **AGENT_CWD** — the repo directory where Claude spawns on webhook events (pre-fill with the current working directory, let user edit if needed)
+4. **Webhook Secret** — for HMAC signature validation on incoming webhooks. Offer to generate one:
+   ```
+   Enter a webhook secret (or press Enter to auto-generate):
+   ```
+   If empty, generate one via Bash: `openssl rand -hex 32`
 
-Then write the MCP configuration to `.mcp.json` in the repo root (create if it doesn't exist, merge if it does):
+### Step 2: Write `.mcp.json`
 
-The MCP server is bundled with this plugin. Resolve `<PLUGIN_ROOT>` to the plugin's installation directory (the value of `${CLAUDE_PLUGIN_ROOT}` — determine this by checking the plugin path, e.g., via `which scottclip` or reading the plugin config).
+Resolve the plugin root path (`${CLAUDE_PLUGIN_ROOT}`). The MCP server is bundled at `${CLAUDE_PLUGIN_ROOT}/mcp/linear-agent/dist/src/server.js`.
+
+Read existing `.mcp.json` if present (merge, don't overwrite other MCP servers). Write or update the `linear-agent` entry:
 
 ```json
 {
   "mcpServers": {
     "linear-agent": {
       "command": "node",
-      "args": ["<PLUGIN_ROOT>/mcp/linear-agent/dist/src/server.js"],
+      "args": ["<resolved_plugin_root>/mcp/linear-agent/dist/src/server.js"],
       "env": {
         "LINEAR_CLIENT_ID": "<client_id>",
         "LINEAR_CLIENT_SECRET": "<client_secret>",
         "LINEAR_WEBHOOK_SECRET": "<webhook_secret>",
-        "LINEAR_CALLBACK_HOST": "<callback_host>",
-        "AGENT_CWD": "<pre-filled-cwd>"
+        "LINEAR_CALLBACK_HOST": "<tunnel_hostname>",
+        "AGENT_CWD": "<current_working_directory>"
       }
     }
   }
 }
 ```
 
-`AGENT_CWD` is pre-filled with the current working directory. Present it to the user for confirmation: "Agent working directory: `/current/path` — press Enter to accept or type a different path."
+`AGENT_CWD` is pre-filled with the current working directory. Present for confirmation:
+```
+Agent working directory: /current/path — press Enter to accept or type a different path:
+```
 
-After writing `.mcp.json`, check if `linear-agent` tools are available:
+### Step 3: Start Receiver and Authorize
 
-- **If tools are available** (unlikely on first run — MCP servers load at session start): Continue to Step 1.
-- **If tools are NOT available** (expected on first run): Report:
-  ```
-  ✓ .mcp.json configured with linear-agent MCP server
+The MCP tools won't be available until after a restart. But we can still authorize now by starting the receiver directly.
 
-  ⚠ Claude Code needs to restart to load the new MCP server.
-  
-  Next steps:
-    1. Restart your Claude Code session (Ctrl+C, then re-open)
-    2. Re-run /scottclip-init — it will detect the config and resume from Step 1
-  ```
-  Then **stop** — do not continue with the rest of init. The user must restart first.
-
-#### Set Up Webhook (Optional)
-
-Ask the user if they want to set up webhook-driven events:
-
-- **Yes** → Explain:
-  1. Start the webhook receiver: `npm run webhook` (from `<PLUGIN_ROOT>/mcp/linear-agent/`)
-  2. Expose it via tunnel: `cloudflared tunnel --url http://localhost:3847`
-  3. Register the tunnel URL in Linear: Settings → API → Webhooks
-     - **URL:** the tunnel URL
-     - **Secret:** the same `LINEAR_WEBHOOK_SECRET` from above
-     - **Events:** check `AgentSessionEvent`
-  4. The `AGENT_CWD` env var in `.mcp.json` tells the webhook receiver where to spawn Claude sessions
-
-- **Not now** → Explain they can set up webhooks later; ScottClip works fine with polling-only mode (`/heartbeat` or `/scottclip-watch --poll-only`)
-
-## Initialization Procedure
-
-### Step 1: Gather Linear Context
-
-> **Resume point:** If the user just restarted after configuring `.mcp.json`, this is where init continues. The linear-agent MCP tools should now be available.
-
-#### Authorize with Linear
-
-Before making any Linear API calls, ensure the app has a valid OAuth token.
-
-1. Test if already authorized by calling `linear_get_viewer`.
-   - **If it succeeds** → report "✓ Authorized as <app name>" and skip to Step 1 below.
-   - **If it fails** → proceed to authorize:
-
-2. Start the webhook receiver (needed for OAuth callback):
+1. Check if the receiver is already running:
    ```
    Run via Bash: lsof -i :3847 | grep LISTEN
    ```
-   - If port is in use → receiver already running, continue.
-   - If not running → start it:
-     ```
-     Run via Bash (background): cd <PLUGIN_ROOT>/mcp/linear-agent && LINEAR_CLIENT_ID=$LINEAR_CLIENT_ID LINEAR_CLIENT_SECRET=$LINEAR_CLIENT_SECRET npm run webhook
-     ```
-     Wait 2 seconds, verify it started.
 
-3. Build the authorization URL using the env vars from `.mcp.json`:
+2. If not running, start it with the credentials we just collected:
    ```
-   https://linear.app/oauth/authorize?
-     client_id=<LINEAR_CLIENT_ID>&
-     redirect_uri=<LINEAR_CALLBACK_HOST>/oauth/callback&
-     response_type=code&
-     scope=read,write,app:assignable,app:mentionable&
-     actor=app
+   Run via Bash (background): cd <resolved_plugin_root>/mcp/linear-agent && LINEAR_CLIENT_ID=<client_id> LINEAR_CLIENT_SECRET=<client_secret> LINEAR_WEBHOOK_SECRET=<webhook_secret> LINEAR_CALLBACK_HOST=<tunnel_hostname> npm run webhook
+   ```
+   Wait 2 seconds, verify it started with `lsof -i :3847`.
+
+3. Build the authorization URL:
+   ```
+   https://linear.app/oauth/authorize?client_id=<client_id>&redirect_uri=<tunnel_hostname>/oauth/callback&response_type=code&scope=read,write,app:assignable,app:mentionable&actor=app
    ```
 
-4. Open the browser automatically:
+4. Open the browser:
    ```
    Run via Bash: open "<authorization_url>"
    ```
    Report: "Opening Linear authorization in your browser. Approve the app and return here."
 
-5. Poll for completion — call `linear_get_viewer` every 5 seconds for up to 90 seconds:
-   - **Success** → report "✓ Authorized as <app name>" and continue to Step 1.
-   - **Timeout** → report the error and the auth URL for manual retry. Stop init.
+5. Poll for the token file — check every 5 seconds for up to 90 seconds:
+   ```
+   Run via Bash: cat ~/.linear-agent/token.json 2>/dev/null
+   ```
+   - **Token file appears** → report "✓ Authorized with Linear!"
+   - **Timeout** → report the auth URL for manual retry. Explain the callback URL in Linear must match `<tunnel_hostname>/oauth/callback`.
 
-#### Gather Linear Context
+### Step 4: Prompt Restart
 
-1. Call `linear_list_teams` to fetch available teams
-2. Call `linear_list_users` to identify the current user
-3. Present findings and ask the user to confirm:
-   - Which **team** to use (if multiple teams exist)
+```
+✓ .mcp.json configured
+✓ Authorized with Linear
+
+Restart Claude Code to load the MCP server, then re-run /scottclip-init to complete setup.
+```
+
+Stop here. Phase 2 runs after restart.
+
+---
+
+## Phase 2: Set Up ScottClip
+
+> Phase 2 starts when: `.mcp.json` has `linear-agent` AND MCP tools are available.
+
+### Step 1: Verify Authorization
+
+Call `linear_get_viewer`. 
+- **Success** → report "✓ Authorized as <app name>"
+- **Failure** → re-run the authorization flow from Phase 1 Step 3.
+
+### Step 2: Gather Linear Context
+
+1. Call `linear_list_teams` to fetch available teams.
+2. Call `linear_list_users` to identify workspace members.
+3. Ask the user to confirm:
+   - Which **team** to use (if multiple exist)
    - Their **display name** for @-mentions in comments (pre-filled from Linear)
    - Their **board user name** for escalation @-mentions (pre-fill with same value as display name)
 
-### Step 2: Choose Persona Preset
+### Step 3: Choose Persona Preset
 
 Ask the user which persona set to scaffold:
 
@@ -176,19 +177,13 @@ Ask the user which persona set to scaffold:
 
 For "custom", ask the user to name each persona and its Linear label.
 
-### Step 3: Create Linear Labels
+### Step 4: Create Linear Labels
 
-Create the ScottClip label group and persona labels in Linear:
+1. Call `linear_list_labels` to check for existing labels.
+2. Call `linear_create_label` to create the parent group label (default: "ScottClip"). Skip if it already exists.
+3. Create child labels under the group — one per persona with a non-null label (e.g., `backend`, `frontend`). Pass the parent group's ID as `parentId`. Skip any that already exist.
 
-1. Call `linear_create_label` to create the parent group label named after `labels.group` (default: "ScottClip")
-2. Create child labels under this group:
-   - One label per persona that has a non-null label (e.g., `backend`, `frontend`)
-
-Use `linear_list_labels` first to check if labels already exist. Skip creation for any label that already exists.
-
-**Important:** The Linear MCP's `create_issue_label` accepts `name`, `color`, and optionally `parentId` (for grouping under a parent label). Fetch the parent group label's ID after creating it, then pass it as `parentId` for child labels.
-
-### Step 4: Scaffold Config & Personas
+### Step 5: Scaffold Config & Personas
 
 1. Create the directory structure:
    ```
@@ -196,35 +191,26 @@ Use `linear_list_labels` first to check if labels already exist. Skip creation f
    ├── config.yaml
    └── personas/
        ├── orchestrator/
-       │   ├── SOUL.md
-       │   ├── TOOLS.md
-       │   └── config.yaml
+       │   ├── SOUL.md, TOOLS.md, config.yaml
        ├── ceo/
-       │   ├── SOUL.md
-       │   ├── TOOLS.md
-       │   └── config.yaml
+       │   ├── SOUL.md, TOOLS.md, config.yaml
        ├── backend/          (if selected)
-       │   ├── SOUL.md
-       │   ├── TOOLS.md
-       │   └── config.yaml
+       │   ├── SOUL.md, TOOLS.md, config.yaml
        └── frontend/         (if selected)
-           ├── SOUL.md
-           ├── TOOLS.md
-           └── config.yaml
+           ├── SOUL.md, TOOLS.md, config.yaml
    ```
 
-2. Copy templates from the plugin's `templates/` directory:
-   - Read each template file from `${CLAUDE_PLUGIN_ROOT}/templates/`
+2. Copy templates from `${CLAUDE_PLUGIN_ROOT}/templates/`:
    - Replace `{{USER_NAME}}` with the user's Linear display name
-   - Replace `{{BOARD_USER}}` with the board user's name (from Step 1)
-   - Replace `{{LINEAR_CLIENT_ID}}` with the OAuth client ID (from Prerequisites)
-   - Replace `{{LINEAR_WEBHOOK_SECRET}}` with the webhook secret (from Prerequisites)
+   - Replace `{{BOARD_USER}}` with the board user name
+   - Replace `{{LINEAR_CLIENT_ID}}` with the OAuth client ID
+   - Replace `{{LINEAR_WEBHOOK_SECRET}}` with the webhook secret
    - Replace `{{TEAM}}` with the selected team name
    - Write to `.scottclip/`
 
 3. Update `config.yaml` personas section to match the selected preset — remove entries for personas that weren't scaffolded.
 
-### Step 5: Offer Watch Mode Setup
+### Step 6: Offer Watch Mode Setup
 
 Ask the user how they want to run ScottClip:
 
@@ -232,44 +218,57 @@ Ask the user how they want to run ScottClip:
 - **Polling only** → Suggest: `/scottclip-watch --poll-only` or `/schedule 30m /heartbeat`
 - **Manual only** → Explain they can run `/heartbeat` when needed
 
-### Step 6: Print Summary
+Remind the user to register the webhook in Linear if they chose watch mode:
+```
+Register your webhook in Linear:
+  Settings → API → Webhooks → New webhook
+  URL: <tunnel_hostname>
+  Secret: <webhook_secret>
+  Events: AgentSessionEvent
+```
 
-Display what was created:
+### Step 7: Print Summary
 
 ```
 ScottClip initialized!
 
-Linear labels created:
+MCP:
+  ✓ linear-agent configured in .mcp.json
+  ✓ Authorized as <app name>
+  ✓ AGENT_CWD: /current/path
+
+Linear labels:
   ✓ ScottClip (group)
   ✓ backend
   ✓ frontend
 
-Config: .scottclip/config.yaml
 Personas:
   ✓ orchestrator → default (no label)
   ✓ ceo          → "ceo" label
-  ✓ backend  → "backend" label
-  ✓ frontend → "frontend" label
+  ✓ backend      → "backend" label
+  ✓ frontend     → "frontend" label
+
+Config: .scottclip/config.yaml
 
 Next steps:
-  1. Review .scottclip/config.yaml
-  2. Customize persona SOUL.md files for your project
-  3. Run /heartbeat or /schedule 30m /heartbeat
-
-MCP configured: .mcp.json
-  ✓ linear-agent server with OAuth credentials
-  ✓ AGENT_CWD set to current directory
+  1. Review and customize persona SOUL.md files
+  2. Run /heartbeat --dry-run to test
+  3. Run /scottclip-watch to start watching for issues
 ```
+
+---
 
 ## Error Handling
 
 | Error | Response |
 |-------|----------|
-| linear-agent MCP not available | Guide user through OAuth app creation and .mcp.json setup (see Prerequisites). |
+| MCP tools not available | Check `.mcp.json` state, guide through Phase 1 or prompt restart. |
+| Authorization fails | Show auth URL for manual retry, check tunnel is running and callback URL matches. |
+| Receiver won't start | Check port 3847 conflict, suggest `WEBHOOK_PORT` env var. |
 | No teams found | Stop. Ask user to verify Linear workspace access. |
-| Label creation fails | Log the error, continue with remaining labels, report at end. |
-| `.scottclip/` already exists | Ask user: overwrite, merge, or cancel. Default to merge (skip existing files). |
-| Template file missing from plugin | Log warning, create a minimal placeholder, continue. |
+| Label creation fails | Log error, continue with remaining labels, report at end. |
+| `.scottclip/` already exists | Ask: overwrite, merge, or cancel (see Re-initialization). |
+| Template file missing | Log warning, create minimal placeholder, continue. |
 
 ## Re-initialization
 
