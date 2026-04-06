@@ -19,7 +19,7 @@ if (!SECRET) {
 }
 
 function verifySignature(body: string, signature: string | null): boolean {
-  if (!SECRET) return true; // No secret configured = skip validation (auth-only mode)
+  if (!SECRET) return false; // No secret configured = reject (set LINEAR_WEBHOOK_SECRET)
   if (!signature) return false;
   const expected = createHmac("sha256", SECRET).update(body).digest("hex");
   const match = signature === expected;
