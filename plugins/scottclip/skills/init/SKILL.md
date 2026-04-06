@@ -60,7 +60,7 @@ Then write the MCP configuration to `.mcp.json` in the repo root (create if it d
   "mcpServers": {
     "linear-agent": {
       "command": "node",
-      "args": ["<path-to-linear-agent>/dist/server.js"],
+      "args": ["<path-to-linear-agent>/dist/src/server.js"],
       "env": {
         "LINEAR_CLIENT_ID": "<client_id>",
         "LINEAR_CLIENT_SECRET": "<client_secret>",

@@ -131,7 +131,7 @@ Primary consumer: [ScottClip](https://github.com/scottzilla/scottclip) (Linear-b
      "mcpServers": {
        "linear-agent": {
          "command": "node",
-         "args": ["/absolute/path/to/mcps/linear-agent/dist/server.js"],
+         "args": ["/absolute/path/to/mcps/linear-agent/dist/src/server.js"],
          "env": {
            "LINEAR_CLIENT_ID": "your_client_id",
            "LINEAR_CLIENT_SECRET": "your_client_secret"

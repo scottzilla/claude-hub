@@ -57,7 +57,7 @@ mcps/linear-agent/
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "linear-agent": "./dist/server.js"
+    "linear-agent": "./dist/src/server.js"
   },
   "scripts": {
     "build": "tsc",
@@ -141,7 +141,7 @@ export { server };
 cd mcps/linear-agent && npm install && npm run build
 ```
 
-Expected: `dist/server.js` created, no errors.
+Expected: `dist/src/server.js` created, no errors.
 
 - [ ] **Step 6: Commit**
 
@@ -1641,7 +1641,7 @@ Expected: 22 total tool registrations across all files.
 - [ ] **Step 3: Verify all imports resolve**
 
 ```bash
-cd mcps/linear-agent && node -e "import('./dist/server.js').then(() => console.log('OK')).catch(e => { console.error(e); process.exit(1) })"
+cd mcps/linear-agent && node -e "import('./dist/src/server.js').then(() => console.log('OK')).catch(e => { console.error(e); process.exit(1) })"
 ```
 
 Expected: "OK" (server imports resolve — it will fail to connect transport but that's fine for import check).
