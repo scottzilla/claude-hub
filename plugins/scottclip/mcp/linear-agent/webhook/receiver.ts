@@ -37,11 +37,12 @@ async function ensureEventsDir() {
 
 async function linearGql(query: string, variables: Record<string, unknown>): Promise<unknown> {
   const token = await getAccessToken();
+  console.log(`GraphQL call with token: ${token.substring(0, 20)}...`);
   const res = await fetch("https://api.linear.app/graphql", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: token,
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ query, variables }),
   });
