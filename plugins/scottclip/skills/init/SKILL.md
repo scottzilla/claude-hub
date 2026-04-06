@@ -111,7 +111,7 @@ The MCP tools won't be available until after a restart. But we can still authori
 
 2. If not running, start it with the credentials we just collected:
    ```
-   Run via Bash (background): cd <resolved_plugin_root>/mcp/linear-agent && LINEAR_CLIENT_ID=<client_id> LINEAR_CLIENT_SECRET=<client_secret> LINEAR_CALLBACK_HOST=<tunnel_hostname> npm run webhook
+   Run via Bash (background): cd <resolved_plugin_root>/mcp/linear-agent && LINEAR_CLIENT_ID=<client_id> LINEAR_CLIENT_SECRET=<client_secret> LINEAR_CALLBACK_HOST=<tunnel_hostname> AGENT_CWD=<agent_cwd> npm run webhook
    ```
    Wait 2 seconds, verify it started with `lsof -i :3847`.
 
@@ -126,12 +126,13 @@ The MCP tools won't be available until after a restart. But we can still authori
    ```
    Report: "Opening Linear authorization in your browser. Approve the app and return here."
 
-5. Poll for the token file — check every 5 seconds for up to 90 seconds:
+5. Poll for the token file — check every 5 seconds for up to 90 seconds. The token is stored at `<agent_cwd>/.scottclip/token.json`:
    ```
-   Run via Bash: cat ~/.linear-agent/token.json 2>/dev/null
+   Run via Bash: cat <agent_cwd>/.scottclip/token.json 2>/dev/null
    ```
-   - **Token file appears** → report "✓ Authorized with Linear!"
-   - **Timeout** → report the auth URL for manual retry. Explain the callback URL in Linear must match `<tunnel_hostname>/oauth/callback`.
+   Where `<agent_cwd>` is the AGENT_CWD value from Step 2 (the repo's working directory).
+   - **Token file appears (contains `access_token`)** → report "✓ Authorized with Linear!"
+   - **Timeout** → report the auth URL for manual retry. Explain the callback URL in Linear's OAuth app must match `<tunnel_hostname>/oauth/callback`.
 
 ### Step 4: Prompt Restart
 
