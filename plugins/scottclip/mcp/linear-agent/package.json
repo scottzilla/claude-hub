@@ -9,18 +9,22 @@
     "build": "tsc",
     "dev": "tsx src/server.ts",
     "prepare": "npm run build",
-    "webhook": "tsx webhook/receiver.ts",
-    "webhook:stop": "lsof -i :${WEBHOOK_PORT:-3847} -t | xargs kill 2>/dev/null || true",
-    "webhook:restart": "npm run webhook:stop && npm run webhook",
-    "webhook:tunnel": "cloudflared tunnel --url http://localhost:${WEBHOOK_PORT:-3847}"
+    "start": "node dist/src/server.js",
+    "stop": "lsof -i :${WEBHOOK_PORT:-3847} -t | xargs kill 2>/dev/null || true",
+    "start:tunnel": "npm run start & cloudflared tunnel --url http://localhost:${WEBHOOK_PORT:-3847}",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
+    "@hono/node-server": "^1.19.12",
     "@modelcontextprotocol/sdk": "^1.12.0",
+    "hono": "^4.12.11",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.2"
   }
 }
