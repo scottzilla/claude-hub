@@ -119,39 +119,42 @@ Ask the user if they want to set up webhook-driven events:
 
 #### Authorize with Linear
 
-Before gathering Linear context, verify the MCP server has a valid token:
+Before making any Linear API calls, ensure the app has a valid OAuth token.
 
-1. Check if a token exists by calling `linear_get_viewer`. 
-   - If it succeeds → token is valid, skip to "Gather Linear Context" below.
-   - If it fails with an auth error → need to authorize.
+1. Test if already authorized by calling `linear_get_viewer`.
+   - **If it succeeds** → report "✓ Authorized as <app name>" and skip to Step 1 below.
+   - **If it fails** → proceed to authorize:
 
-2. Ensure the webhook receiver is running (needed for the OAuth callback):
-   - Run via Bash: `lsof -i :3847 | grep LISTEN` to check if port is in use.
-   - If not running, start it in the background:
+2. Start the webhook receiver (needed for OAuth callback):
+   ```
+   Run via Bash: lsof -i :3847 | grep LISTEN
+   ```
+   - If port is in use → receiver already running, continue.
+   - If not running → start it:
      ```
-     Run via Bash (background): cd <linear-agent-mcp-path> && npm run webhook
+     Run via Bash (background): cd <linear-agent-mcp-path> && LINEAR_CLIENT_ID=$LINEAR_CLIENT_ID LINEAR_CLIENT_SECRET=$LINEAR_CLIENT_SECRET npm run webhook
      ```
-   - Wait 2 seconds, verify it started.
+     Wait 2 seconds, verify it started.
 
-3. Construct the authorization URL:
+3. Build the authorization URL using the env vars from `.mcp.json`:
    ```
    https://linear.app/oauth/authorize?
-     client_id=<LINEAR_CLIENT_ID from .mcp.json>&
+     client_id=<LINEAR_CLIENT_ID>&
      redirect_uri=<LINEAR_CALLBACK_HOST>/oauth/callback&
      response_type=code&
      scope=read,write,app:assignable,app:mentionable&
      actor=app
    ```
 
-4. Open the URL in the user's browser:
+4. Open the browser automatically:
    ```
    Run via Bash: open "<authorization_url>"
    ```
-   Tell the user: "Opening Linear authorization in your browser. Approve the app, then come back here."
+   Report: "Opening Linear authorization in your browser. Approve the app and return here."
 
-5. Wait for the token to be saved. Poll by calling `linear_get_viewer` every 3 seconds (up to 60 seconds):
-   - If it succeeds → authorization complete. Report: "✓ Authorized as <app name>"
-   - If it times out → report: "Authorization timed out. Make sure the webhook receiver is running and try again."
+5. Poll for completion — call `linear_get_viewer` every 5 seconds for up to 90 seconds:
+   - **Success** → report "✓ Authorized as <app name>" and continue to Step 1.
+   - **Timeout** → report the error and the auth URL for manual retry. Stop init.
 
 #### Gather Linear Context
 

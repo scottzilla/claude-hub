@@ -57,6 +57,13 @@ async function requestToken(): Promise<TokenData> {
 
   if (!res.ok) {
     const body = await res.text();
+    if (body.includes("client_credentials")) {
+      throw new Error(
+        "This Linear OAuth app does not support client_credentials grant. " +
+        "Authorize via browser instead: start the webhook receiver (npm run webhook) " +
+        "and open the authorization URL printed at startup."
+      );
+    }
     throw new Error(`Token request failed (${res.status}): ${body}`);
   }
 
@@ -198,9 +205,21 @@ export async function getAccessToken(): Promise<string> {
     }
   }
 
-  // Fall back to client_credentials (30-day token, no refresh)
-  cachedToken = await requestToken();
-  return cachedToken.access_token;
+  // No token at all — try client_credentials, but give a clear error if it fails
+  try {
+    cachedToken = await requestToken();
+    return cachedToken.access_token;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("client_credentials")) {
+      throw new Error(
+        "No valid token found. Authorize via browser: " +
+        "start the receiver (npm run webhook) and visit the auth URL, " +
+        "or run /scottclip-init which will open the browser for you."
+      );
+    }
+    throw err;
+  }
 }
 
 export { AGENT_DIR };
