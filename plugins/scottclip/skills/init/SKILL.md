@@ -63,11 +63,7 @@ Ask the user for these values one at a time. Use `AskUserQuestion` for each. Do 
 
 Resolve the plugin root path (`${CLAUDE_PLUGIN_ROOT}`). The MCP server is bundled at `${CLAUDE_PLUGIN_ROOT}/mcp/linear-agent/`.
 
-Before writing `.mcp.json`, ensure the MCP server is ready to run. Check BOTH `dist/` and `node_modules/`:
-```
-Run via Bash: ls <resolved_plugin_root>/mcp/linear-agent/dist/src/server.js && ls <resolved_plugin_root>/mcp/linear-agent/node_modules/@modelcontextprotocol/sdk/package.json
-```
-If either check fails, install dependencies and build:
+Always install dependencies and build the MCP server to ensure it's up to date:
 ```
 Run via Bash: cd <resolved_plugin_root>/mcp/linear-agent && npm install && npm run build
 ```
