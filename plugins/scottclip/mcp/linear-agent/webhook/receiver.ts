@@ -10,7 +10,8 @@ import { getAccessToken, exchangeAuthCode, getAuthUrl, getCallbackUrl } from "..
 
 const PORT = parseInt(process.env.WEBHOOK_PORT || "3847", 10);
 const SECRET = process.env.LINEAR_WEBHOOK_SECRET;
-const EVENTS_DIR = join(process.env.LINEAR_AGENT_DIR || join(homedir(), ".linear-agent"), "events");
+const AGENT_DIR = process.env.LINEAR_AGENT_DIR || (process.env.AGENT_CWD ? join(process.env.AGENT_CWD, ".scottclip") : join(homedir(), ".scottclip"));
+const EVENTS_DIR = join(AGENT_DIR, "events");
 const CLAUDE_BIN = process.env.CLAUDE_BIN || "claude";
 const TARGET_REPO = process.env.AGENT_CWD;
 
