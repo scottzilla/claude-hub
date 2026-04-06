@@ -14,6 +14,17 @@ Initialize ScottClip in the current repository. This creates the `.scottclip/` d
 
 ScottClip requires the `linear-agent` MCP server for OAuth `actor=app` authentication, which enables delegate-based locking and agent sessions.
 
+#### Resume Detection
+
+If `.mcp.json` exists and contains a `linear-agent` entry but the tools aren't available yet, the user likely needs to restart their Claude Code session. Report:
+
+```
+.mcp.json is configured with linear-agent, but the MCP tools aren't loaded yet.
+Please restart your Claude Code session and re-run /scottclip-init to continue.
+```
+
+If `.scottclip/config.yaml` already exists AND `linear-agent` tools are available, this is a re-initialization — skip to the "Re-initialization" section at the bottom.
+
 1. Check if `linear-agent` tools are available (any tool starting with `mcp__linear_agent__`).
 2. If available, skip to the Initialization Procedure.
 3. If not available, guide the user through setup:
@@ -64,6 +75,21 @@ The `<path-to-linear-agent>` should be resolved by checking:
 1. If the user has `claude-hub` cloned locally, use that path (e.g., `~/code/claude-hub/mcps/linear-agent`)
 2. Otherwise, ask the user where the `linear-agent` MCP server is installed
 
+After writing `.mcp.json`, check if `linear-agent` tools are available:
+
+- **If tools are available** (unlikely on first run — MCP servers load at session start): Continue to Step 1.
+- **If tools are NOT available** (expected on first run): Report:
+  ```
+  ✓ .mcp.json configured with linear-agent MCP server
+
+  ⚠ Claude Code needs to restart to load the new MCP server.
+  
+  Next steps:
+    1. Restart your Claude Code session (Ctrl+C, then re-open)
+    2. Re-run /scottclip-init — it will detect the config and resume from Step 1
+  ```
+  Then **stop** — do not continue with the rest of init. The user must restart first.
+
 #### Set Up Webhook (Optional)
 
 Ask the user if they want to set up webhook-driven events:
@@ -82,6 +108,8 @@ Ask the user if they want to set up webhook-driven events:
 ## Initialization Procedure
 
 ### Step 1: Gather Linear Context
+
+> **Resume point:** If the user just restarted after configuring `.mcp.json`, this is where init continues. The linear-agent MCP tools should now be available.
 
 1. Call `linear_list_teams` to fetch available teams
 2. Call `linear_list_users` to identify the current user
