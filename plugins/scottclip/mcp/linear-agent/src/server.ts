@@ -5,6 +5,8 @@ import { serve } from "@hono/node-server";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { randomUUID } from "node:crypto";
+import { writeFileSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
 import { registerIssueTools } from "./tools/issues.js";
 import { registerRelationTools } from "./tools/relations.js";
 import { registerCommentTools } from "./tools/comments.js";
@@ -109,6 +111,14 @@ async function main() {
       console.log(`  Webhook: http://localhost:${info.port}/webhook`);
       console.log(`  OAuth:   http://localhost:${info.port}/oauth/callback`);
       console.log(`  Status:  http://localhost:${info.port}/`);
+
+      // Write PID file so init/status skills can track the running server
+      const pidPath = join(process.cwd(), ".scottclip", ".server.pid");
+      try {
+        writeFileSync(pidPath, String(process.pid));
+      } catch {
+        // .scottclip dir might not exist yet — not fatal
+      }
     }
   );
 
@@ -126,6 +136,13 @@ async function main() {
     for (const [id, transport] of transports) {
       transport.close?.();
       transports.delete(id);
+    }
+    // Clean up PID file
+    const pidPath = join(process.cwd(), ".scottclip", ".server.pid");
+    try {
+      unlinkSync(pidPath);
+    } catch {
+      // File may not exist — not fatal
     }
     process.exit(0);
   };

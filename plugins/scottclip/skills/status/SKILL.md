@@ -17,11 +17,24 @@ Display the current state of ScottClip in this repository: schedule info, last h
 
 Read `.scottclip/config.yaml`. If missing, report that ScottClip is not initialized and suggest `/scottclip-init`.
 
-### Step 2: Check Schedule
+### Step 2: Check Server Health
+
+Check if the consolidated HTTP server is running:
+```
+Run via Bash: curl -s -o /dev/null -w "%{http_code}" http://localhost:3847/ 2>/dev/null || echo "offline"
+```
+
+- **200** → Report `Server: ✓ Running on port 3847`. Also fetch and display the status page:
+  ```
+  Run via Bash: curl -s http://localhost:3847/ | head -5
+  ```
+- **offline** → Report `Server: ✗ Not running (start with /scottclip-watch or: cd <plugin_root>/mcp/linear-agent && npm run start)`
+
+### Step 3: Check Schedule
 
 Report schedule status as "unknown" — schedule state is not programmatically queryable from within Claude Code. The user manages their own `/schedule` configuration.
 
-### Step 3: Last Heartbeat
+### Step 4: Last Heartbeat
 
 Read the last line of `.scottclip/heartbeat-log.jsonl` (if it exists). Report:
 - Heartbeat number, timestamp, and how long ago it ran
@@ -30,7 +43,7 @@ Read the last line of `.scottclip/heartbeat-log.jsonl` (if it exists). Report:
 
 If no log file exists, report "No heartbeat history found."
 
-### Step 4: Current Issues
+### Step 5: Current Issues
 
 Call `mcp__claude_ai_Linear__list_issues` to fetch issues in the configured project (from `config.yaml` → `linear.project`), excluding terminal states. Filter and categorize by Linear state:
 
@@ -49,11 +62,12 @@ Call `mcp__claude_ai_Linear__list_issues` to fetch issues in the configured proj
 - Issues in "Blocked" state
 - Show: issue ID, Board user mention, blocker summary from last agent comment
 
-### Step 5: Format Output
+### Step 6: Format Output
 
 ```
 ScottClip Status
 ────────────────
+Server:       ✓ Running on port 3847   — or —   ✗ Not running
 Last beat:    Heartbeat #N — X min ago
 
 Since last heartbeat:

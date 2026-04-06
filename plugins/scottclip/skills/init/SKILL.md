@@ -25,11 +25,21 @@ Run these checks at the start to determine where to resume:
 
 2. **`~/.claude/.mcp.json` has `linear-agent` entry AND tools are available** → Phase 1 is done. Jump to **Phase 2**.
 
-3. **`~/.claude/.mcp.json` has `linear-agent` entry BUT tools NOT available** → config was written but session hasn't restarted. Report:
+3. **`~/.claude/.mcp.json` has `linear-agent` entry BUT tools NOT available** → config was written but session hasn't restarted. First check if the server is running:
    ```
-   ~/.claude/.mcp.json is configured but the MCP server isn't loaded yet.
-   Restart Claude Code and re-run /scottclip-init.
+   Run via Bash: curl -s http://localhost:3847/ 2>/dev/null
    ```
+   - **Server responds** → report:
+     ```
+     ~/.claude/.mcp.json is configured and the server is running on port 3847.
+     Restart Claude Code and re-run /scottclip-init to complete setup.
+     ```
+   - **Server not running** → offer to restart it:
+     ```
+     The server is not running. Restart it with:
+       cd <plugin_root>/mcp/linear-agent && nohup node dist/server.js > <agent_cwd>/.scottclip/server.log 2>&1 &
+     Then restart Claude Code and re-run /scottclip-init.
+     ```
    Stop.
 
 4. **No `linear-agent` in `~/.claude/.mcp.json` (or no `~/.claude/.mcp.json`)** → Fresh start. Run **Phase 1**.
@@ -103,25 +113,46 @@ The MCP tools won't be available until after a restart. But we can still authori
    Run via Bash: mkdir -p .scottclip
    ```
 
-2. Stop any existing process on port 3847 and start a fresh server:
+2. Stop any existing process on port 3847 and start a fresh server as a detached background daemon:
    ```
-   Run via Bash (background): cd <resolved_plugin_root>/mcp/linear-agent && npm run start
+   Run via Bash: cd <resolved_plugin_root>/mcp/linear-agent && nohup node dist/server.js > <agent_cwd>/.scottclip/server.log 2>&1 & echo $!
+   ```
+   Capture the PID from the output and save it:
+   ```
+   Run via Bash: echo <pid> > <agent_cwd>/.scottclip/.server.pid
    ```
    The server reads credentials from `.scottclip/.env` written in Step 2.
-   Wait 2 seconds, verify it started with `lsof -i :3847`.
+   The `nohup` ensures the server persists after the Claude Code session ends.
 
-3. Build the authorization URL:
+3. Poll the health endpoint to confirm the server is up. Check every 2 seconds for up to 10 seconds:
+   ```
+   Run via Bash: curl -s http://localhost:3847/ 2>/dev/null
+   ```
+   - **Response contains "ScottClip"** → server is running. Report:
+     ```
+     ✓ Server running on port 3847 (PID <pid>)
+       MCP:     http://localhost:3847/mcp
+       Webhook: http://localhost:3847/webhook
+       OAuth:   http://localhost:3847/oauth/callback
+     ```
+   - **Timeout after 10 seconds** → report error and show the log tail:
+     ```
+     Run via Bash: tail -20 <agent_cwd>/.scottclip/server.log
+     ```
+     Stop and ask the user to resolve the issue before retrying.
+
+4. Build the authorization URL:
    ```
    https://linear.app/oauth/authorize?client_id=<client_id>&redirect_uri=<tunnel_hostname>/oauth/callback&response_type=code&scope=read,write,app:assignable,app:mentionable&actor=app
    ```
 
-4. Open the browser:
+5. Open the browser:
    ```
    Run via Bash: open "<authorization_url>"
    ```
    Report: "Opening Linear authorization in your browser. Approve the app and return here."
 
-5. Poll for the token file — check every 5 seconds for up to 90 seconds. The token is stored at `<agent_cwd>/.scottclip/token.json`:
+6. Poll for the token file — check every 5 seconds for up to 90 seconds. The token is stored at `<agent_cwd>/.scottclip/token.json`:
    ```
    Run via Bash: cat <agent_cwd>/.scottclip/token.json 2>/dev/null
    ```
@@ -135,9 +166,12 @@ The MCP tools won't be available until after a restart. But we can still authori
 ✓ ~/.claude/.mcp.json configured
 ✓ .scottclip/.env written
 ✓ Authorized with Linear
+✓ Server running in background (PID <pid>) — persists after restart
 
 Restart Claude Code to load the MCP server, then re-run /scottclip-init to complete setup.
 ```
+
+The server is running in the background and will persist after restart.
 
 Stop here. Phase 2 runs after restart.
 
