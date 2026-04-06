@@ -10,20 +10,81 @@ Initialize ScottClip in the current repository. This creates the `.scottclip/` d
 
 ## Prerequisites
 
-Before starting, verify the Linear MCP is available:
+### Linear Agent MCP Server
 
-1. Check that `mcp__claude_ai_Linear__list_teams` is callable
-2. If not available, stop and instruct the user to connect Linear MCP first:
-   - Add Linear MCP to `.mcp.json` or global MCP config
-   - Restart Claude Code session
-   - Re-run `/scottclip-init`
+ScottClip requires the `linear-agent` MCP server for OAuth `actor=app` authentication, which enables delegate-based locking and agent sessions.
+
+1. Check if `linear-agent` tools are available (any tool starting with `mcp__linear_agent__`).
+2. If available, skip to the Initialization Procedure.
+3. If not available, guide the user through setup:
+
+#### Create a Linear OAuth App
+
+1. Go to [linear.app/settings/api/applications](https://linear.app/settings/api/applications)
+2. Click **New application**
+3. Set the **Callback URL** to: `http://localhost:3847/oauth/callback` (or the user's preferred callback URL)
+4. After creation, note the **Client ID** and **Client Secret**
+5. The authorization URL will include these query parameters:
+   ```
+   https://linear.app/oauth/authorize?
+     client_id=YOUR_CLIENT_ID&
+     redirect_uri=http://localhost:3847/oauth/callback&
+     response_type=code&
+     scope=read,write,app:assignable,app:mentionable&
+     actor=app
+   ```
+
+#### Configure the MCP Server
+
+Ask the user for:
+- **LINEAR_CLIENT_ID** — from the OAuth app
+- **LINEAR_CLIENT_SECRET** — from the OAuth app
+- **LINEAR_WEBHOOK_SECRET** — a secret string for HMAC webhook validation (user can generate one, e.g., `openssl rand -hex 32`)
+
+Then write the MCP configuration to `.mcp.json` in the repo root (create if it doesn't exist, merge if it does):
+
+```json
+{
+  "mcpServers": {
+    "linear-agent": {
+      "command": "node",
+      "args": ["<path-to-linear-agent>/dist/server.js"],
+      "env": {
+        "LINEAR_CLIENT_ID": "<client_id>",
+        "LINEAR_CLIENT_SECRET": "<client_secret>",
+        "LINEAR_WEBHOOK_SECRET": "<webhook_secret>",
+        "SCOTTCLIP_REPO": "<absolute-path-to-this-repo>"
+      }
+    }
+  }
+}
+```
+
+The `<path-to-linear-agent>` should be resolved by checking:
+1. If the user has `claude-hub` cloned locally, use that path (e.g., `~/code/claude-hub/mcps/linear-agent`)
+2. Otherwise, ask the user where the `linear-agent` MCP server is installed
+
+#### Set Up Webhook (Optional)
+
+Ask the user if they want to set up webhook-driven events:
+
+- **Yes** → Explain:
+  1. Start the webhook receiver: `npm run webhook` (from the linear-agent directory)
+  2. Expose it via tunnel: `cloudflared tunnel --url http://localhost:3847`
+  3. Register the tunnel URL in Linear: Settings → API → Webhooks
+     - **URL:** the tunnel URL
+     - **Secret:** the same `LINEAR_WEBHOOK_SECRET` from above
+     - **Events:** check `AgentSessionEvent`
+  4. The `SCOTTCLIP_REPO` env var in `.mcp.json` tells the webhook receiver where to spawn Claude sessions
+
+- **Not now** → Explain they can set up webhooks later; ScottClip works fine with polling-only mode (`/heartbeat` or `/scottclip-watch --poll-only`)
 
 ## Initialization Procedure
 
 ### Step 1: Gather Linear Context
 
-1. Call `mcp__claude_ai_Linear__list_teams` to fetch available teams
-2. Call `mcp__claude_ai_Linear__list_users` to identify the current user
+1. Call `linear_list_teams` to fetch available teams
+2. Call `linear_list_users` to identify the current user
 3. Present findings and ask the user to confirm:
    - Which **team** to use (if multiple teams exist)
    - Their **display name** for @-mentions in comments (pre-filled from Linear)
@@ -46,11 +107,11 @@ For "custom", ask the user to name each persona and its Linear label.
 
 Create the ScottClip label group and persona labels in Linear:
 
-1. Call `mcp__claude_ai_Linear__create_issue_label` to create the parent group label named after `labels.group` (default: "ScottClip")
+1. Call `linear_create_label` to create the parent group label named after `labels.group` (default: "ScottClip")
 2. Create child labels under this group:
    - One label per persona that has a non-null label (e.g., `backend`, `frontend`)
 
-Use `mcp__claude_ai_Linear__list_issue_labels` first to check if labels already exist. Skip creation for any label that already exists.
+Use `linear_list_labels` first to check if labels already exist. Skip creation for any label that already exists.
 
 **Important:** The Linear MCP's `create_issue_label` accepts `name`, `color`, and optionally `parentId` (for grouping under a parent label). Fetch the parent group label's ID after creating it, then pass it as `parentId` for child labels.
 
@@ -83,17 +144,20 @@ Use `mcp__claude_ai_Linear__list_issue_labels` first to check if labels already 
    - Read each template file from `${CLAUDE_PLUGIN_ROOT}/templates/`
    - Replace `{{USER_NAME}}` with the user's Linear display name
    - Replace `{{BOARD_USER}}` with the board user's name (from Step 1)
+   - Replace `{{LINEAR_CLIENT_ID}}` with the OAuth client ID (from Prerequisites)
+   - Replace `{{LINEAR_WEBHOOK_SECRET}}` with the webhook secret (from Prerequisites)
    - Replace `{{TEAM}}` with the selected team name
    - Write to `.scottclip/`
 
 3. Update `config.yaml` personas section to match the selected preset — remove entries for personas that weren't scaffolded.
 
-### Step 5: Offer Schedule Setup
+### Step 5: Offer Watch Mode Setup
 
-Ask the user if they want to set up a recurring heartbeat:
+Ask the user how they want to run ScottClip:
 
-- **Yes** → Suggest: `/schedule 30m /heartbeat` and explain cadence options
-- **Not now** → Explain they can run `/heartbeat` manually or set up `/schedule` later
+- **Watch mode (recommended)** → Suggest: `/scottclip-watch` for dual-mode operation (webhook + polling)
+- **Polling only** → Suggest: `/scottclip-watch --poll-only` or `/schedule 30m /heartbeat`
+- **Manual only** → Explain they can run `/heartbeat` when needed
 
 ### Step 6: Print Summary
 
@@ -118,13 +182,17 @@ Next steps:
   1. Review .scottclip/config.yaml
   2. Customize persona SOUL.md files for your project
   3. Run /heartbeat or /schedule 30m /heartbeat
+
+MCP configured: .mcp.json
+  ✓ linear-agent server with OAuth credentials
+  ✓ SCOTTCLIP_REPO set to current directory
 ```
 
 ## Error Handling
 
 | Error | Response |
 |-------|----------|
-| Linear MCP not available | Stop. Print setup instructions for connecting Linear MCP. |
+| linear-agent MCP not available | Guide user through OAuth app creation and .mcp.json setup (see Prerequisites). |
 | No teams found | Stop. Ask user to verify Linear workspace access. |
 | Label creation fails | Log the error, continue with remaining labels, report at end. |
 | `.scottclip/` already exists | Ask user: overwrite, merge, or cancel. Default to merge (skip existing files). |

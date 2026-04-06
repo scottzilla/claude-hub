@@ -9,6 +9,13 @@ linear:
   team: "{{TEAM}}"                   # Default team for new issues/sub-issues
   project: null                      # Optional: scope inbox to a specific project
 
+# Linear Agent MCP configuration
+# These values are also set in .mcp.json env vars for the linear-agent server
+linear_agent:
+  client_id: "{{LINEAR_CLIENT_ID}}"     # OAuth app client ID
+  webhook_secret: "{{LINEAR_WEBHOOK_SECRET}}"  # HMAC secret for webhook validation
+  webhook_port: 3847                      # Local port for webhook receiver
+
 # Heartbeat behavior
 heartbeat:
   max_issues_per_heartbeat: 2        # Max issues to work per heartbeat cycle
