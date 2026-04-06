@@ -114,8 +114,8 @@ export function getAuthUrl(): string {
   if (!clientId) {
     throw new Error("LINEAR_CLIENT_ID must be set.");
   }
-  const port = process.env.WEBHOOK_PORT || "3847";
-  const redirectUri = `http://localhost:${port}/oauth/callback`;
+  const callbackHost = process.env.LINEAR_CALLBACK_HOST || `http://localhost:${process.env.WEBHOOK_PORT || "3847"}`;
+  const redirectUri = `${callbackHost}/oauth/callback`;
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -124,6 +124,11 @@ export function getAuthUrl(): string {
     actor: "app",
   });
   return `https://linear.app/oauth/authorize?${params}`;
+}
+
+export function getCallbackUrl(): string {
+  const callbackHost = process.env.LINEAR_CALLBACK_HOST || `http://localhost:${process.env.WEBHOOK_PORT || "3847"}`;
+  return `${callbackHost}/oauth/callback`;
 }
 
 export async function getAccessToken(): Promise<string> {

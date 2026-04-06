@@ -33,7 +33,7 @@ If `.scottclip/config.yaml` already exists AND `linear-agent` tools are availabl
 
 1. Go to [linear.app/settings/api/applications](https://linear.app/settings/api/applications)
 2. Click **New application**
-3. Set the **Callback URL** to: `http://localhost:3847/oauth/callback` (or the user's preferred callback URL)
+3. Set the **Callback URL** to: `<LINEAR_CALLBACK_HOST>/oauth/callback` (e.g., `https://your-tunnel.trycloudflare.com/oauth/callback`)
 4. After creation, note the **Client ID** and **Client Secret**
 5. The authorization URL will include these query parameters:
    ```
@@ -51,6 +51,7 @@ Ask the user for:
 - **LINEAR_CLIENT_ID** — from the OAuth app
 - **LINEAR_CLIENT_SECRET** — from the OAuth app
 - **LINEAR_WEBHOOK_SECRET** — a secret string for HMAC webhook validation (user can generate one, e.g., `openssl rand -hex 32`)
+- **LINEAR_CALLBACK_HOST** — the public hostname for OAuth callback and webhooks (e.g., `https://your-tunnel.trycloudflare.com`). This must match the Callback URL registered on the Linear OAuth app. Default: `http://localhost:3847` (local development only).
 - **AGENT_CWD** — the repo directory where Claude spawns on webhook events (pre-fill with the current working directory, let user edit if needed)
 
 Then write the MCP configuration to `.mcp.json` in the repo root (create if it doesn't exist, merge if it does):
@@ -65,6 +66,7 @@ Then write the MCP configuration to `.mcp.json` in the repo root (create if it d
         "LINEAR_CLIENT_ID": "<client_id>",
         "LINEAR_CLIENT_SECRET": "<client_secret>",
         "LINEAR_WEBHOOK_SECRET": "<webhook_secret>",
+        "LINEAR_CALLBACK_HOST": "<callback_host>",
         "AGENT_CWD": "<pre-filled-cwd>"
       }
     }

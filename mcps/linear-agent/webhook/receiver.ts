@@ -6,7 +6,7 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { spawn } from "node:child_process";
-import { getAccessToken, exchangeAuthCode, getAuthUrl } from "../src/auth.js";
+import { getAccessToken, exchangeAuthCode, getAuthUrl, getCallbackUrl } from "../src/auth.js";
 
 const PORT = parseInt(process.env.WEBHOOK_PORT || "3847", 10);
 const SECRET = process.env.LINEAR_WEBHOOK_SECRET;
@@ -147,7 +147,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     }
 
     try {
-      const redirectUri = `http://localhost:${PORT}/oauth/callback`;
+      const redirectUri = getCallbackUrl();
       await exchangeAuthCode(code, redirectUri);
       console.log("OAuth authorization successful — token saved");
       res.writeHead(200, { "Content-Type": "text/html" });
@@ -226,7 +226,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 server.listen(PORT, () => {
   console.log(`Linear agent receiver listening on port ${PORT}`);
   console.log(`Events directory: ${EVENTS_DIR}`);
-  console.log(`OAuth callback: http://localhost:${PORT}/oauth/callback`);
+  console.log(`OAuth callback: ${getCallbackUrl()}`);
   try {
     console.log(`Authorize: ${getAuthUrl()}`);
   } catch {
