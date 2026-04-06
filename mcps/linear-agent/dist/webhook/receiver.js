@@ -5,18 +5,19 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { spawn } from "node:child_process";
-import { getAccessToken } from "../src/auth.js";
+import { getAccessToken, exchangeAuthCode, getAuthUrl } from "../src/auth.js";
 const PORT = parseInt(process.env.WEBHOOK_PORT || "3847", 10);
 const SECRET = process.env.LINEAR_WEBHOOK_SECRET;
 const EVENTS_DIR = join(process.env.LINEAR_AGENT_DIR || join(homedir(), ".linear-agent"), "events");
 const CLAUDE_BIN = process.env.CLAUDE_BIN || "claude";
 const TARGET_REPO = process.env.AGENT_CWD;
 if (!SECRET) {
-    console.error("LINEAR_WEBHOOK_SECRET is required");
-    process.exit(1);
+    console.warn("LINEAR_WEBHOOK_SECRET not set — webhook signature validation disabled (auth-only mode)");
 }
 function verifySignature(body, signature) {
-    if (!signature || !SECRET)
+    if (!SECRET)
+        return false; // No secret = reject all webhooks
+    if (!signature)
         return false;
     const expected = createHmac("sha256", SECRET).update(body).digest("hex");
     return signature === expected;
@@ -108,6 +109,44 @@ async function spawnClaude(event) {
     });
 }
 const server = createServer(async (req, res) => {
+    const url = new URL(req.url || "/", `http://localhost:${PORT}`);
+    // OAuth callback handler
+    if (req.method === "GET" && url.pathname === "/oauth/callback") {
+        const code = url.searchParams.get("code");
+        const error = url.searchParams.get("error");
+        if (error) {
+            console.error(`OAuth error: ${error}`);
+            res.writeHead(400, { "Content-Type": "text/html" });
+            res.end(`<h1>Authorization failed</h1><p>${error}</p><p>Close this tab and try again.</p>`);
+            return;
+        }
+        if (!code) {
+            res.writeHead(400, { "Content-Type": "text/html" });
+            res.end(`<h1>Missing authorization code</h1><p>Close this tab and try again.</p>`);
+            return;
+        }
+        try {
+            const redirectUri = `http://localhost:${PORT}/oauth/callback`;
+            await exchangeAuthCode(code, redirectUri);
+            console.log("OAuth authorization successful — token saved");
+            res.writeHead(200, { "Content-Type": "text/html" });
+            res.end(`<h1>Authorized!</h1><p>Token saved. You can close this tab and return to Claude Code.</p>`);
+        }
+        catch (err) {
+            console.error("OAuth token exchange failed:", err);
+            res.writeHead(500, { "Content-Type": "text/html" });
+            res.end(`<h1>Token exchange failed</h1><p>${err instanceof Error ? err.message : String(err)}</p>`);
+        }
+        return;
+    }
+    // Auth status page
+    if (req.method === "GET" && url.pathname === "/") {
+        const authUrl = getAuthUrl();
+        res.writeHead(200, { "Content-Type": "text/html" });
+        res.end(`<h1>ScottClip Linear Agent</h1><p><a href="${authUrl}">Authorize with Linear</a></p>`);
+        return;
+    }
+    // Webhook handler (POST only)
     if (req.method !== "POST") {
         res.writeHead(405);
         res.end("Method not allowed");
@@ -141,12 +180,10 @@ const server = createServer(async (req, res) => {
         if (event.type === "AgentSessionEvent" && event.data?.id) {
             const sessionId = event.data.id;
             if (event.action === "created") {
-                // New delegation — ack immediately, spawn Claude to do the work
                 await ackSession(sessionId, "Starting up...");
                 spawnClaude(event).catch((err) => console.error("Spawn error:", err));
             }
             else if (event.action === "prompted") {
-                // User message in existing session — ack immediately, spawn Claude to respond
                 await ackSession(sessionId, "Reading your message...");
                 spawnClaude(event).catch((err) => console.error("Spawn error:", err));
             }
@@ -159,7 +196,14 @@ const server = createServer(async (req, res) => {
     }
 });
 server.listen(PORT, () => {
-    console.log(`Linear webhook receiver listening on port ${PORT}`);
+    console.log(`Linear agent receiver listening on port ${PORT}`);
     console.log(`Events directory: ${EVENTS_DIR}`);
+    console.log(`OAuth callback: http://localhost:${PORT}/oauth/callback`);
+    try {
+        console.log(`Authorize: ${getAuthUrl()}`);
+    }
+    catch {
+        console.log("Authorize: LINEAR_CLIENT_ID not set — OAuth unavailable");
+    }
     console.log("Expose this with: cloudflared tunnel --url http://localhost:" + PORT);
 });
