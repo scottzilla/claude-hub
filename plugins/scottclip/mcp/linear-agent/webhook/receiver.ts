@@ -22,7 +22,12 @@ function verifySignature(body: string, signature: string | null): boolean {
   if (!SECRET) return true; // No secret configured = skip validation (auth-only mode)
   if (!signature) return false;
   const expected = createHmac("sha256", SECRET).update(body).digest("hex");
-  return signature === expected;
+  const match = signature === expected;
+  if (!match) {
+    console.error(`Signature mismatch — expected: ${expected.substring(0, 16)}..., got: ${signature.substring(0, 16)}...`);
+    console.error(`Secret starts with: ${SECRET.substring(0, 10)}..., body length: ${body.length}`);
+  }
+  return match;
 }
 
 async function ensureEventsDir() {
