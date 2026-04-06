@@ -64,7 +64,7 @@ Then write the MCP configuration to `.mcp.json` in the repo root (create if it d
         "LINEAR_CLIENT_ID": "<client_id>",
         "LINEAR_CLIENT_SECRET": "<client_secret>",
         "LINEAR_WEBHOOK_SECRET": "<webhook_secret>",
-        "SCOTTCLIP_REPO": "<absolute-path-to-this-repo>"
+        "AGENT_CWD": "<absolute-path-to-this-repo>"
       }
     }
   }
@@ -101,7 +101,7 @@ Ask the user if they want to set up webhook-driven events:
      - **URL:** the tunnel URL
      - **Secret:** the same `LINEAR_WEBHOOK_SECRET` from above
      - **Events:** check `AgentSessionEvent`
-  4. The `SCOTTCLIP_REPO` env var in `.mcp.json` tells the webhook receiver where to spawn Claude sessions
+  4. The `AGENT_CWD` env var in `.mcp.json` tells the webhook receiver where to spawn Claude sessions
 
 - **Not now** → Explain they can set up webhooks later; ScottClip works fine with polling-only mode (`/heartbeat` or `/scottclip-watch --poll-only`)
 
@@ -213,7 +213,7 @@ Next steps:
 
 MCP configured: .mcp.json
   ✓ linear-agent server with OAuth credentials
-  ✓ SCOTTCLIP_REPO set to current directory
+  ✓ AGENT_CWD set to current directory
 ```
 
 ## Error Handling

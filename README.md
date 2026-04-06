@@ -147,7 +147,7 @@ For real-time Linear agent events (delegation, user messages in sessions):
 
 ```bash
 # Start the receiver
-LINEAR_WEBHOOK_SECRET=your_secret SCOTTCLIP_REPO=/path/to/repo npm run webhook
+LINEAR_WEBHOOK_SECRET=your_secret AGENT_CWD=/path/to/repo npm run webhook
 
 # Expose via tunnel (separate terminal)
 cloudflared tunnel --url http://localhost:3847

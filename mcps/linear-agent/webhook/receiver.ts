@@ -12,7 +12,7 @@ const PORT = parseInt(process.env.WEBHOOK_PORT || "3847", 10);
 const SECRET = process.env.LINEAR_WEBHOOK_SECRET;
 const EVENTS_DIR = join(process.env.LINEAR_AGENT_DIR || join(homedir(), ".linear-agent"), "events");
 const CLAUDE_BIN = process.env.CLAUDE_BIN || "claude";
-const TARGET_REPO = process.env.WOTERCLIP_REPO;
+const TARGET_REPO = process.env.AGENT_CWD;
 
 if (!SECRET) {
   console.error("LINEAR_WEBHOOK_SECRET is required");
@@ -75,7 +75,7 @@ async function ackSession(sessionId: string, message = "Starting up..."): Promis
 
 async function spawnClaude(event: Record<string, unknown>): Promise<void> {
   if (!TARGET_REPO) {
-    console.error("WOTERCLIP_REPO not set — cannot spawn Claude session");
+    console.error("AGENT_CWD not set — cannot spawn Claude session");
     return;
   }
 
