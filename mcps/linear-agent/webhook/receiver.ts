@@ -102,7 +102,7 @@ async function spawnClaude(event: Record<string, unknown>): Promise<void> {
     lines.push(``, `Context:`, promptContext);
   }
 
-  lines.push(``, `Run /heartbeat to process this issue. The agent session is already acknowledged.`);
+  lines.push(``, `Run /heartbeat --issue ${issueIdentifier} to process this issue. The agent session is already acknowledged.`);
 
   const prompt = lines.join("\n");
 

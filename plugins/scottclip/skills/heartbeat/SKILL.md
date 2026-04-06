@@ -11,6 +11,7 @@ Execute the ScottClip heartbeat cycle: pick up assigned Linear issues, resolve t
 **Arguments:**
 - `--dry-run` — Show what would be picked up without doing work
 - `--persona <name>` — Only pick issues matching a specific persona
+- `--issue <ID>` — Work a single issue by ID or identifier (e.g., WOT-42). Skips inbox scan — goes directly to Step 4 (Resolve Persona) for that issue.
 
 **Reference files** (consult as needed during execution):
 - `${CLAUDE_PLUGIN_ROOT}/references/comment-format.md` — Comment templates and rules
@@ -33,6 +34,13 @@ Check quiet hours: if `quiet_hours.enabled` and current time is within the quiet
 
 ## Step 2: Check Inbox
 
+If `--issue <ID>` is set, skip Steps 2 and 3 entirely. Instead:
+1. Call `linear_get_issue` with the provided ID.
+2. If the issue doesn't exist or is in a terminal state (Done, Canceled), exit: "Issue not found or already completed."
+3. Proceed directly to Step 4 with this single issue.
+
+Otherwise, perform the normal inbox scan:
+
 1. Call `mcp__claude_ai_Linear__list_issues` to fetch issues in the project, excluding Done, Canceled, and Duplicate states.
    - If `list_issues` fails (network error, Linear API outage): delete lockfile and exit with error: "Linear API unavailable. Will retry next heartbeat."
 2. Filter client-side:
@@ -46,6 +54,8 @@ Check quiet hours: if `quiet_hours.enabled` and current time is within the quiet
 4. Detect stale "In Progress" issues: if an issue is "In Progress" but has no heartbeat comment within `stale_lock_hours`, move it to "Todo" via `mcp__claude_ai_Linear__save_issue` and post a cleanup comment.
 
 ## Step 3: Collect Ready Issues
+
+If `--issue <ID>` is set, this step was skipped — the single issue from Step 2 is the only issue to work.
 
 1. If `--persona <name>` flag is set, filter to only issues matching that persona's label.
 2. Collect up to `max_issues_per_heartbeat` issues from the sorted inbox.
