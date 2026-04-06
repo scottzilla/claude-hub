@@ -64,12 +64,6 @@ Ask the user for these values, one at a time:
    Enter your Linear Client Secret:
    ```
 
-4. **Webhook Secret** — for HMAC signature validation on incoming webhooks. Offer to generate one:
-   ```
-   Enter a webhook secret (or press Enter to auto-generate):
-   ```
-   If empty, generate one via Bash: `openssl rand -hex 32`
-
 ### Step 2: Write `.mcp.json`
 
 Resolve the plugin root path (`${CLAUDE_PLUGIN_ROOT}`). The MCP server is bundled at `${CLAUDE_PLUGIN_ROOT}/mcp/linear-agent/dist/src/server.js`.
@@ -85,7 +79,7 @@ Read existing `.mcp.json` if present (merge, don't overwrite other MCP servers).
       "env": {
         "LINEAR_CLIENT_ID": "<client_id>",
         "LINEAR_CLIENT_SECRET": "<client_secret>",
-        "LINEAR_WEBHOOK_SECRET": "<webhook_secret>",
+        "LINEAR_WEBHOOK_SECRET": "",
         "LINEAR_CALLBACK_HOST": "<tunnel_hostname>",
         "AGENT_CWD": "<current_working_directory>"
       }
@@ -93,6 +87,8 @@ Read existing `.mcp.json` if present (merge, don't overwrite other MCP servers).
   }
 }
 ```
+
+`LINEAR_WEBHOOK_SECRET` is left empty for now — it will be set in Phase 2 after registering the webhook in Linear.
 
 `AGENT_CWD` is pre-filled with the current working directory. Present for confirmation:
 ```
@@ -110,7 +106,7 @@ The MCP tools won't be available until after a restart. But we can still authori
 
 2. If not running, start it with the credentials we just collected:
    ```
-   Run via Bash (background): cd <resolved_plugin_root>/mcp/linear-agent && LINEAR_CLIENT_ID=<client_id> LINEAR_CLIENT_SECRET=<client_secret> LINEAR_WEBHOOK_SECRET=<webhook_secret> LINEAR_CALLBACK_HOST=<tunnel_hostname> npm run webhook
+   Run via Bash (background): cd <resolved_plugin_root>/mcp/linear-agent && LINEAR_CLIENT_ID=<client_id> LINEAR_CLIENT_SECRET=<client_secret> LINEAR_CALLBACK_HOST=<tunnel_hostname> npm run webhook
    ```
    Wait 2 seconds, verify it started with `lsof -i :3847`.
 
@@ -204,30 +200,57 @@ For "custom", ask the user to name each persona and its Linear label.
    - Replace `{{USER_NAME}}` with the user's Linear display name
    - Replace `{{BOARD_USER}}` with the board user name
    - Replace `{{LINEAR_CLIENT_ID}}` with the OAuth client ID
-   - Replace `{{LINEAR_WEBHOOK_SECRET}}` with the webhook secret
    - Replace `{{TEAM}}` with the selected team name
    - Write to `.scottclip/`
 
 3. Update `config.yaml` personas section to match the selected preset — remove entries for personas that weren't scaffolded.
 
-### Step 6: Offer Watch Mode Setup
+### Step 6: Set Up Webhook (Optional)
+
+Ask the user if they want to enable real-time event-driven mode:
+
+- **Yes (recommended)** →
+
+  1. Instruct the user to register a webhook in Linear:
+     ```
+     Register a webhook in Linear:
+       1. Go to Settings → API → Webhooks → New webhook
+       2. URL: <tunnel_hostname> (from Phase 1)
+       3. Events: check "AgentSessionEvent"
+       4. Save — Linear will generate a webhook secret
+       5. Copy the webhook secret from the webhook details page
+     ```
+
+  2. Ask for the webhook secret:
+     ```
+     Paste the webhook secret from Linear:
+     ```
+
+  3. Update `.mcp.json` — set `LINEAR_WEBHOOK_SECRET` to the value the user provided.
+
+  4. Report:
+     ```
+     ✓ Webhook secret saved to .mcp.json
+     
+     Note: Restart Claude Code to apply the updated .mcp.json,
+     or start the receiver manually:
+       cd <plugin_root>/mcp/linear-agent && npm run webhook
+     ```
+
+  5. Suggest: `/scottclip-watch` for dual-mode operation (webhook + polling)
+
+- **Not now** →
+  Explain they can set up webhooks later. ScottClip works fine with polling-only mode (`/heartbeat` or `/scottclip-watch --poll-only`).
+
+### Step 7: Offer Watch Mode
 
 Ask the user how they want to run ScottClip:
 
-- **Watch mode (recommended)** → Suggest: `/scottclip-watch` for dual-mode operation (webhook + polling)
+- **Watch mode (recommended)** → Suggest: `/scottclip-watch`
 - **Polling only** → Suggest: `/scottclip-watch --poll-only` or `/schedule 30m /heartbeat`
 - **Manual only** → Explain they can run `/heartbeat` when needed
 
-Remind the user to register the webhook in Linear if they chose watch mode:
-```
-Register your webhook in Linear:
-  Settings → API → Webhooks → New webhook
-  URL: <tunnel_hostname>
-  Secret: <webhook_secret>
-  Events: AgentSessionEvent
-```
-
-### Step 7: Print Summary
+### Step 8: Print Summary
 
 ```
 ScottClip initialized!
@@ -247,6 +270,9 @@ Personas:
   ✓ ceo          → "ceo" label
   ✓ backend      → "backend" label
   ✓ frontend     → "frontend" label
+
+Webhook:
+  ✓ Registered (secret configured)    — or —    ⚠ Not configured (polling-only mode)
 
 Config: .scottclip/config.yaml
 
