@@ -26,7 +26,7 @@ function verifySignature(body: string, signature: string | null): boolean {
 }
 
 async function ensureEventsDir() {
-  await mkdir(EVENTS_DIR, { recursive: true, mode: 0o700 });
+  await mkdir(EVENTS_DIR, { recursive: true });
 }
 
 async function linearGql(query: string, variables: Record<string, unknown>): Promise<unknown> {
@@ -198,7 +198,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 
     await ensureEventsDir();
     const filename = `${Date.now()}-${randomUUID()}.json`;
-    await writeFile(join(EVENTS_DIR, filename), JSON.stringify(enriched, null, 2), { mode: 0o600 });
+    await writeFile(join(EVENTS_DIR, filename), JSON.stringify(enriched, null, 2));
 
     console.log(`Event received: ${event.type || "unknown"} (${event.action || "?"}) → ${filename}`);
     res.writeHead(200);

@@ -8,7 +8,7 @@ interface TokenData {
   refresh_token?: string; // Present for authorization_code tokens, absent for client_credentials
 }
 
-const AGENT_DIR = process.env.LINEAR_AGENT_DIR || join(homedir(), ".linear-agent");
+const AGENT_DIR = process.env.LINEAR_AGENT_DIR || (process.env.AGENT_CWD ? join(process.env.AGENT_CWD, ".scottclip") : join(homedir(), ".scottclip"));
 export const TOKEN_PATH = join(AGENT_DIR, "token.json");
 const TOKEN_ENDPOINT = "https://api.linear.app/oauth/token";
 const REFRESH_BUFFER_MS = 60 * 60 * 1000;
@@ -16,7 +16,7 @@ const REFRESH_BUFFER_MS = 60 * 60 * 1000;
 let cachedToken: TokenData | null = null;
 
 async function ensureDir(): Promise<void> {
-  await mkdir(AGENT_DIR, { recursive: true, mode: 0o700 });
+  await mkdir(AGENT_DIR, { recursive: true });
 }
 
 async function loadCachedToken(): Promise<TokenData | null> {
@@ -30,7 +30,7 @@ async function loadCachedToken(): Promise<TokenData | null> {
 
 async function persistToken(token: TokenData): Promise<void> {
   await ensureDir();
-  await writeFile(TOKEN_PATH, JSON.stringify(token, null, 2), { mode: 0o600 });
+  await writeFile(TOKEN_PATH, JSON.stringify(token, null, 2));
 }
 
 async function requestToken(): Promise<TokenData> {
