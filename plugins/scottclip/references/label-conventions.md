@@ -24,6 +24,7 @@ Additional persona labels can be added via `/persona-create` and will appear in 
 ### Persona Label Rules
 
 - **One persona label per issue.** Never dual-label — decompose into sub-issues instead.
+- **Dual-label detection:** If an issue has multiple persona labels, the heartbeat will block the issue and post a warning comment. Remove the extra label(s) before re-assigning.
 - Labels are applied by the Orchestrator during triage, or manually by the Board.
 - Custom persona labels are added via `/persona-create` and registered in `config.yaml`.
 
