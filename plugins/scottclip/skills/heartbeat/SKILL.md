@@ -72,11 +72,12 @@ If `--issue <ID>` is set, this step was skipped — the single issue from Step 2
 ## Step 4: Resolve Persona
 
 1. Read the issue's labels. Match each label against the `personas` map in config to find persona labels.
-2. **Multiple persona labels found** → halt work on this issue. Post a comment:
-   ```
-   ⚠️ Multiple persona labels detected: `backend`, `frontend`. One issue = one persona. Remove extra labels and re-assign.
-   ```
-   Move the issue to Blocked state. Proceed to the next issue.
+2. **Multiple persona labels found** → halt work on this issue:
+   - Post a comment: `⚠️ Multiple persona labels detected: \`backend\`, \`frontend\`. One issue = one persona. Remove extra labels and re-delegate.`
+   - Reassign the issue to the board user (from `config.yaml` → `linear.user_name`) so it lands back in their inbox.
+   - Release the delegate (set `delegateId: null`) if claimed.
+   - Move the issue to Blocked state.
+   - Proceed to the next issue.
 3. **No persona label found** → load the persona with `is_default: true` (typically Orchestrator).
 4. **Exactly one persona label** → load that persona.
 3. Load persona files from `.scottclip/<persona.path>/`:
