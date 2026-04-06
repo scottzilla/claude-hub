@@ -40,24 +40,20 @@ Run these checks at the start to determine where to resume:
 
 ### Step 1: Collect Credentials
 
-Ask the user for these values one at a time. Use `AskUserQuestion` for each. Do NOT add extra instructions, field names, or UI language beyond what is shown below.
+Ask the user for all values in a single prompt. Do NOT split across multiple interactions. Do NOT add extra instructions or UI language beyond what is shown below.
 
-1. **Tunnel hostname** — ask the user:
-   > What is your publicly accessible tunnel hostname? (e.g., `https://my-tunnel.trycloudflare.com`)
-   
-   This is the base URL for both the OAuth callback and Linear webhooks. The user should have a tunnel running (cloudflared, ngrok, Tailscale Funnel, etc.) or plan to set one up.
-
-2. **Linear Client ID** — first explain, then ask:
-   > If you haven't created a Linear OAuth app yet:
-   > 1. Go to linear.app/settings/api/applications
-   > 2. Click "New application"  
-   > 3. Set Callback URL to: `<tunnel_hostname from step 1>/oauth/callback`
-   > 4. Note the Client ID and Client Secret
-   >
-   > What is your Linear OAuth Client ID?
-
-3. **Linear Client Secret** — ask:
-   > What is your Linear OAuth Client Secret?
+> To connect ScottClip to Linear, I need a few things:
+>
+> If you haven't created a Linear OAuth app yet:
+> 1. Go to linear.app/settings/api/applications
+> 2. Click "New application"
+> 3. Set the Callback URL to: `<your-tunnel-hostname>/oauth/callback`
+> 4. Note the Client ID and Client Secret
+>
+> Please provide:
+> - **Tunnel hostname** (e.g., `https://my-tunnel.trycloudflare.com`)
+> - **Linear Client ID**
+> - **Linear Client Secret**
 
 ### Step 2: Write `.mcp.json`
 
