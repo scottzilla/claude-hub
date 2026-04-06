@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "linear-agent": "./dist/src/server.js"
+    "linear-agent": "./dist/server.js"
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/server.ts",
     "prepare": "npm run build",
-    "start": "node dist/src/server.js",
+    "start": "node dist/server.js",
     "stop": "lsof -i :${WEBHOOK_PORT:-3847} -t | xargs kill 2>/dev/null || true",
     "start:tunnel": "npm run start & cloudflared tunnel --url http://localhost:${WEBHOOK_PORT:-3847}",
     "test": "vitest run",
