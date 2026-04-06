@@ -45,9 +45,9 @@ If no flags are provided, start both webhook receiver and polling (full dual-mod
 
 2. Start the webhook receiver in the background:
    ```
-   Run via Bash (background): cd <linear-agent-mcp-path> && npm run webhook
+   Run via Bash (background): cd <PLUGIN_ROOT>/mcp/linear-agent && npm run webhook
    ```
-   The MCP path is the directory containing the `linear-agent` MCP server. Check the user's MCP configuration (`.mcp.json` or global MCP settings) to find it, or use the `LINEAR_AGENT_DIR` environment variable.
+   `<PLUGIN_ROOT>` is the plugin's installation directory (the value of `${CLAUDE_PLUGIN_ROOT}`). Check the user's MCP configuration (`.mcp.json` or global MCP settings) to confirm the path, or use the `LINEAR_AGENT_DIR` environment variable as an override.
 
 3. Wait 2 seconds, then verify the receiver started:
    - Run `lsof -i :3847` — should show a listening process.

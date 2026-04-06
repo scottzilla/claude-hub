@@ -207,7 +207,7 @@ Linear expects 5-10 second agent response to webhooks. WoterClip's heartbeat mod
 ## Project structure
 
 ```
-/Users/scottzilla/code/claude-hub/mcps/linear-agent/
+/Users/scottzilla/code/claude-hub/plugins/scottclip/mcp/linear-agent/
   src/
     server.ts              # MCP server entry, tool registration
     graphql.ts             # Linear GraphQL client (queries + mutations)
@@ -251,7 +251,7 @@ Linear's API requires state IDs, not names. This MCP resolves names transparentl
 
 ### Phase 1: Build and test
 
-Implement the MCP server in `claude-hub/mcps/linear-agent/`. Test against Linear's API independently. No WoterClip changes.
+Implement the MCP server in `claude-hub/plugins/scottclip/mcp/linear-agent/`. Test against Linear's API independently. No WoterClip changes.
 
 ### Phase 2: Dual-stack
 

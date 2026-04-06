@@ -57,12 +57,14 @@ Ask the user for:
 
 Then write the MCP configuration to `.mcp.json` in the repo root (create if it doesn't exist, merge if it does):
 
+The MCP server is bundled with this plugin. Resolve `<PLUGIN_ROOT>` to the plugin's installation directory (the value of `${CLAUDE_PLUGIN_ROOT}` — determine this by checking the plugin path, e.g., via `which scottclip` or reading the plugin config).
+
 ```json
 {
   "mcpServers": {
     "linear-agent": {
       "command": "node",
-      "args": ["<path-to-linear-agent>/dist/src/server.js"],
+      "args": ["<PLUGIN_ROOT>/mcp/linear-agent/dist/src/server.js"],
       "env": {
         "LINEAR_CLIENT_ID": "<client_id>",
         "LINEAR_CLIENT_SECRET": "<client_secret>",
@@ -74,10 +76,6 @@ Then write the MCP configuration to `.mcp.json` in the repo root (create if it d
   }
 }
 ```
-
-The `<path-to-linear-agent>` should be resolved by checking:
-1. If the user has `claude-hub` cloned locally, use that path (e.g., `~/code/claude-hub/mcps/linear-agent`)
-2. Otherwise, ask the user where the `linear-agent` MCP server is installed
 
 `AGENT_CWD` is pre-filled with the current working directory. Present it to the user for confirmation: "Agent working directory: `/current/path` — press Enter to accept or type a different path."
 
@@ -101,7 +99,7 @@ After writing `.mcp.json`, check if `linear-agent` tools are available:
 Ask the user if they want to set up webhook-driven events:
 
 - **Yes** → Explain:
-  1. Start the webhook receiver: `npm run webhook` (from the linear-agent directory)
+  1. Start the webhook receiver: `npm run webhook` (from `<PLUGIN_ROOT>/mcp/linear-agent/`)
   2. Expose it via tunnel: `cloudflared tunnel --url http://localhost:3847`
   3. Register the tunnel URL in Linear: Settings → API → Webhooks
      - **URL:** the tunnel URL
@@ -132,7 +130,7 @@ Before making any Linear API calls, ensure the app has a valid OAuth token.
    - If port is in use → receiver already running, continue.
    - If not running → start it:
      ```
-     Run via Bash (background): cd <linear-agent-mcp-path> && LINEAR_CLIENT_ID=$LINEAR_CLIENT_ID LINEAR_CLIENT_SECRET=$LINEAR_CLIENT_SECRET npm run webhook
+     Run via Bash (background): cd <PLUGIN_ROOT>/mcp/linear-agent && LINEAR_CLIENT_ID=$LINEAR_CLIENT_ID LINEAR_CLIENT_SECRET=$LINEAR_CLIENT_SECRET npm run webhook
      ```
      Wait 2 seconds, verify it started.
 

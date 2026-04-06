@@ -38,19 +38,10 @@ The host model handles routing decisions and conversation context. Workers handl
 │       │   └── deep-thinker.md
 │       └── CLAUDE.md
 ├── mcps/
-│   ├── claude-dispatch/          # Cost-tiered worker MCP (standalone)
-│   │   ├── src/
-│   │   ├── dist/
-│   │   ├── .mcp.json
-│   │   └── package.json
-│   └── linear-agent/             # Linear API with agent features (actor=app)
+│   └── claude-dispatch/          # Cost-tiered worker MCP (standalone)
 │       ├── src/
-│       │   ├── tools/            # 26 MCP tools
-│       │   ├── auth.ts           # OAuth token manager
-│       │   ├── graphql.ts        # Linear GraphQL client
-│       │   └── server.ts         # MCP entry point
-│       ├── webhook/
-│       │   └── receiver.ts       # Webhook listener + Claude spawner
+│       ├── dist/
+│       ├── .mcp.json
 │       └── package.json
 ├── CLAUDE.md
 ├── README.md
@@ -106,70 +97,9 @@ Then add to your `.mcp.json` or `claude_desktop_config.json`:
 }
 ```
 
-### linear-agent
+### linear-agent (bundled with scottclip)
 
-Custom MCP server for Linear's API with `actor=app` OAuth authentication. Enables features the built-in Linear MCP doesn't support: delegate-based issue locking, agent sessions, agent activities, and webhook event consumption.
-
-**26 tools** covering issues, comments, labels, teams, users, documents, agent sessions, issue relations, workflow states, and webhook events.
-
-Primary consumer: [ScottClip](https://github.com/scottzilla/scottclip) (Linear-backed agent orchestration plugin).
-
-#### Setup
-
-1. Create a Linear OAuth app at [linear.app/settings/api/applications](https://linear.app/settings/api/applications) with scopes: `read`, `write`, `app:assignable`, `app:mentionable`. Set actor to `app`.
-
-2. Install and build:
-   ```bash
-   cd mcps/linear-agent
-   npm install
-   npm run build
-   ```
-
-3. Add to your `.mcp.json`:
-   ```json
-   {
-     "mcpServers": {
-       "linear-agent": {
-         "command": "node",
-         "args": ["/absolute/path/to/mcps/linear-agent/dist/src/server.js"],
-         "env": {
-           "LINEAR_CLIENT_ID": "your_client_id",
-           "LINEAR_CLIENT_SECRET": "your_client_secret"
-         }
-       }
-     }
-   }
-   ```
-
-#### Webhook receiver (optional)
-
-For real-time Linear agent events (delegation, user messages in sessions):
-
-```bash
-# Start the receiver
-LINEAR_WEBHOOK_SECRET=your_secret AGENT_CWD=/path/to/repo npm run webhook
-
-# Expose via tunnel (separate terminal)
-cloudflared tunnel --url http://localhost:3847
-```
-
-Register the tunnel URL as a webhook in Linear (Settings → API → Webhooks → `AgentSessionEvent`). The receiver validates HMAC signatures, acknowledges agent sessions within seconds, and spawns Claude Code sessions to do the work.
-
-#### Tools
-
-| Category | Tools |
-|----------|-------|
-| Issues | `save_issue`, `list_issues`, `get_issue` |
-| Relations | `set_relation`, `remove_relation` |
-| Comments | `list_comments`, `create_comment`, `delete_comment` |
-| Labels | `list_labels`, `create_label` |
-| Teams/Users | `list_teams`, `list_users`, `get_user`, `get_viewer` |
-| Documents | `search_documents`, `get_document`, `list_documents`, `create_document`, `update_document`, `get_attachment` |
-| Agent Sessions | `create_session`, `update_session`, `create_activity` |
-| Events | `poll_events`, `get_webhook_status` |
-| States | `list_states` |
-
-All tool names are prefixed with `linear_` (e.g., `mcp__linear_agent__linear_save_issue`).
+The `linear-agent` MCP server is bundled inside the scottclip plugin at `plugins/scottclip/mcp/linear-agent/`. It's configured automatically by `/scottclip-init`. See the [scottclip README](./plugins/scottclip/README.md) for setup instructions.
 
 ## Adding a new plugin
 

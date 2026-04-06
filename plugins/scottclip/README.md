@@ -43,7 +43,7 @@ claude --plugin-dir /path/to/scottclip
       }
     }
     ```
-  - **Custom `linear-agent` MCP** (recommended for agent features): Enables delegate-based locking, agent sessions, and webhook events. See [claude-hub/mcps/linear-agent](https://github.com/scottzilla/claude-hub/tree/main/mcps/linear-agent) for setup.
+  - **Custom `linear-agent` MCP** (recommended for agent features): Enables delegate-based locking, agent sessions, and webhook events. The custom `linear-agent` MCP server is bundled with this plugin at `mcp/linear-agent/`. It's configured automatically by `/scottclip-init`.
 
 ## Quick Start
 
