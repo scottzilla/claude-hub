@@ -60,7 +60,7 @@ async function requestToken(): Promise<TokenData> {
     if (body.includes("client_credentials")) {
       throw new Error(
         "This Linear OAuth app does not support client_credentials grant. " +
-        "Authorize via browser instead: start the webhook receiver (npm run webhook) " +
+        "Authorize via browser instead: start the server (npm run start) " +
         "and open the authorization URL printed at startup."
       );
     }
@@ -214,7 +214,7 @@ export async function getAccessToken(): Promise<string> {
     if (msg.includes("client_credentials")) {
       throw new Error(
         "No valid token found. Authorize via browser: " +
-        "start the receiver (npm run webhook) and visit the auth URL, " +
+        "start the server (npm run start) and visit the auth URL, " +
         "or run /scottclip-init which will open the browser for you."
       );
     }
