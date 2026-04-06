@@ -62,11 +62,36 @@ Routing: Linear issue label → `personas` map in config.yaml → persona direct
 | References | `references/*.md` | Referenced by skills |
 | Templates | `templates/` | Used by init skill only |
 
+## MCP Server (`mcp/linear-agent/`)
+
+The plugin bundles a Hono-based HTTP server that Claude Code connects to via HTTP transport (not stdio). Key modules:
+
+- `src/server.ts` — entry point; starts Hono on port 3847
+- `src/spawn.ts` — spawns Claude agent sessions for incoming events
+- `src/webhook.ts` — handles Linear webhook POST at `/webhook`
+- `src/oauth.ts` — OAuth 2.0 callback handler at `/oauth/callback`
+- `src/polling.ts` — built-in polling timer (fires `/heartbeat` at `POLL_INTERVAL` ms)
+- `src/env.ts` — loads credentials from `.scottclip/.env`
+
+The server previously had a separate `webhook/receiver.ts` — that file was deleted when the architecture was consolidated into the single Hono server.
+
+**MCP transport:** HTTP (`WebStandardStreamableHTTPServerTransport`) at `/mcp`. The global `~/.claude/.mcp.json` uses a `url` key pointing to `http://localhost:3847/mcp` — not `command`/`args`. Credentials are stored in `.scottclip/.env`, not in `.mcp.json`.
+
+**npm scripts** (from `mcp/linear-agent/`): `start`, `stop`, `start:tunnel`, `test`, `test:watch`, `dev`, `build`.
+
 ## Working on This Repo
 
-This repo has no build system, no tests, no dependencies. "Development" means editing markdown and YAML files.
+The plugin markdown/YAML is the primary artifact. The `mcp/linear-agent/` subdirectory has a full build system.
 
-**To test the plugin locally:** `claude --plugin-dir /path/to/scottclip`
+**Plugin files only** — editing markdown and YAML:
+- No build step needed
+- Test with: `claude --plugin-dir /path/to/scottclip`
+
+**MCP server** (`mcp/linear-agent/`) — TypeScript with build and tests:
+- Build: `npm run build`
+- Test: `npm test` (vitest)
+- Dev: `npm run dev` (watch mode)
+- Dependencies: hono, @hono/node-server, vitest, @modelcontextprotocol/sdk
 
 **Validation checklist:**
 - YAML files parse cleanly (`python3 -c "import yaml; yaml.safe_load(open('file.yaml'))"`)

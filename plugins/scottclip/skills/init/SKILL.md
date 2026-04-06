@@ -6,12 +6,12 @@ version: 0.2.0
 
 # ScottClip Initialization
 
-Initialize ScottClip in the current repository. Creates `.mcp.json` (MCP server config), authorizes with Linear via OAuth, and scaffolds `.scottclip/` with config, persona templates, and Linear labels.
+Initialize ScottClip in the current repository. Creates `~/.claude/.mcp.json` (global MCP server config), authorizes with Linear via OAuth, and scaffolds `.scottclip/` with config, persona templates, and Linear labels.
 
 ## Flow Overview
 
 ```
-Phase 1 (first run):  Collect credentials → Write .mcp.json → Start receiver → Browser auth → Restart
+Phase 1 (first run):  Collect credentials → Write ~/.claude/.mcp.json + .scottclip/.env → Start server → Browser auth → Restart
 Phase 2 (after restart): Verify auth → Pick team → Choose personas → Create labels → Scaffold config → Done
 ```
 
@@ -23,16 +23,16 @@ Run these checks at the start to determine where to resume:
 
 1. **`.scottclip/config.yaml` exists AND `linear-agent` tools available** → this is a re-initialization. Skip to the "Re-initialization" section at the bottom.
 
-2. **`.mcp.json` has `linear-agent` entry AND tools are available** → Phase 1 is done. Jump to **Phase 2**.
+2. **`~/.claude/.mcp.json` has `linear-agent` entry AND tools are available** → Phase 1 is done. Jump to **Phase 2**.
 
-3. **`.mcp.json` has `linear-agent` entry BUT tools NOT available** → `.mcp.json` was written but session hasn't restarted. Report:
+3. **`~/.claude/.mcp.json` has `linear-agent` entry BUT tools NOT available** → config was written but session hasn't restarted. Report:
    ```
-   .mcp.json is configured but the MCP server isn't loaded yet.
+   ~/.claude/.mcp.json is configured but the MCP server isn't loaded yet.
    Restart Claude Code and re-run /scottclip-init.
    ```
    Stop.
 
-4. **No `linear-agent` in `.mcp.json` (or no `.mcp.json`)** → Fresh start. Run **Phase 1**.
+4. **No `linear-agent` in `~/.claude/.mcp.json` (or no `~/.claude/.mcp.json`)** → Fresh start. Run **Phase 1**.
 
 ---
 
@@ -55,7 +55,7 @@ Ask the user for all values in a single prompt. Do NOT split across multiple int
 > - **Linear Client ID**
 > - **Linear Client Secret**
 
-### Step 2: Write `.mcp.json`
+### Step 2: Write `~/.claude/.mcp.json` and `.scottclip/.env`
 
 Resolve the plugin root path (`${CLAUDE_PLUGIN_ROOT}`). The MCP server is bundled at `${CLAUDE_PLUGIN_ROOT}/mcp/linear-agent/`.
 
@@ -65,24 +65,26 @@ Run via Bash: cd <resolved_plugin_root>/mcp/linear-agent && npm install && npm r
 ```
 This MUST succeed before proceeding — without it, the MCP server won't load after restart.
 
-Read existing `.mcp.json` if present (merge, don't overwrite other MCP servers). Write or update the `linear-agent` entry:
+**Write global MCP config.** Read existing `~/.claude/.mcp.json` if present (merge, don't overwrite other MCP servers). Write or update the `linear-agent` entry using the `url` key (HTTP transport):
 
 ```json
 {
   "mcpServers": {
     "linear-agent": {
-      "command": "node",
-      "args": ["<resolved_plugin_root>/mcp/linear-agent/dist/src/server.js"],
-      "env": {
-        "LINEAR_CLIENT_ID": "<client_id>",
-        "LINEAR_CLIENT_SECRET": "<client_secret>",
-        "LINEAR_WEBHOOK_SECRET": "",
-        "LINEAR_CALLBACK_HOST": "<tunnel_hostname>",
-        "AGENT_CWD": "<current_working_directory>"
-      }
+      "url": "http://localhost:3847/mcp"
     }
   }
 }
+```
+
+**Write `.scottclip/.env`.** Create the `.scottclip/` directory if needed. Write credentials to `.scottclip/.env` (the server loads this file automatically):
+
+```
+LINEAR_CLIENT_ID=<client_id>
+LINEAR_CLIENT_SECRET=<client_secret>
+LINEAR_WEBHOOK_SECRET=
+LINEAR_CALLBACK_HOST=<tunnel_hostname>
+AGENT_CWD=<current_working_directory>
 ```
 
 `LINEAR_WEBHOOK_SECRET` is left empty for now — it will be set in Phase 2 after registering the webhook in Linear.
@@ -92,14 +94,15 @@ Read existing `.mcp.json` if present (merge, don't overwrite other MCP servers).
 Agent working directory: /current/path — press Enter to accept or type a different path:
 ```
 
-### Step 3: Start Receiver and Authorize
+### Step 3: Start Server and Authorize
 
-The MCP tools won't be available until after a restart. But we can still authorize now by starting the receiver directly.
+The MCP tools won't be available until after a restart. But we can still authorize now by starting the consolidated server directly.
 
-1. Stop any existing receiver and start a fresh one:
+1. Stop any existing process on port 3847 and start a fresh server:
    ```
-   Run via Bash (background): cd <resolved_plugin_root>/mcp/linear-agent && LINEAR_CLIENT_ID=<client_id> LINEAR_CLIENT_SECRET=<client_secret> LINEAR_CALLBACK_HOST=<tunnel_hostname> AGENT_CWD=<agent_cwd> npm run webhook:restart
+   Run via Bash (background): cd <resolved_plugin_root>/mcp/linear-agent && npm run start
    ```
+   The server reads credentials from `.scottclip/.env` written in Step 2.
    Wait 2 seconds, verify it started with `lsof -i :3847`.
 
 3. Build the authorization URL:
@@ -124,7 +127,8 @@ The MCP tools won't be available until after a restart. But we can still authori
 ### Step 4: Prompt Restart
 
 ```
-✓ .mcp.json configured
+✓ ~/.claude/.mcp.json configured
+✓ .scottclip/.env written
 ✓ Authorized with Linear
 
 Restart Claude Code to load the MCP server, then re-run /scottclip-init to complete setup.
@@ -219,28 +223,27 @@ Ask the user if they want to enable real-time event-driven mode:
      Paste the webhook secret from Linear:
      ```
 
-  3. Update `.mcp.json` — set `LINEAR_WEBHOOK_SECRET` to the value the user provided.
+  3. Update `.scottclip/.env` — set `LINEAR_WEBHOOK_SECRET` to the value the user provided.
 
   4. Report:
      ```
-     ✓ Webhook secret saved to .mcp.json
+     ✓ Webhook secret saved to .scottclip/.env
      
-     Note: Restart Claude Code to apply the updated .mcp.json,
-     or start the receiver manually:
-       cd <plugin_root>/mcp/linear-agent && npm run webhook
+     Note: Restart the server to apply the updated credentials:
+       cd <plugin_root>/mcp/linear-agent && npm run start
+     Or use /scottclip-watch to start it.
      ```
 
-  5. Suggest: `/scottclip-watch` for dual-mode operation (webhook + polling)
+  5. Suggest: `/scottclip-watch` to start the server (webhook + polling)
 
 - **Not now** →
-  Explain they can set up webhooks later. ScottClip works fine with polling-only mode (`/heartbeat` or `/scottclip-watch --poll-only`).
+  Explain they can set up webhooks later. ScottClip works fine with polling-only mode (`/heartbeat` or `/scottclip-watch`).
 
 ### Step 7: Offer Watch Mode
 
 Ask the user how they want to run ScottClip:
 
 - **Watch mode (recommended)** → Suggest: `/scottclip-watch`
-- **Polling only** → Suggest: `/scottclip-watch --poll-only` or `/schedule 30m /heartbeat`
 - **Manual only** → Explain they can run `/heartbeat` when needed
 
 ### Step 8: Print Summary
@@ -249,7 +252,8 @@ Ask the user how they want to run ScottClip:
 ScottClip initialized!
 
 MCP:
-  ✓ linear-agent configured in .mcp.json
+  ✓ linear-agent configured in ~/.claude/.mcp.json (url: http://localhost:3847/mcp)
+  ✓ Credentials in .scottclip/.env
   ✓ Authorized as <app name>
   ✓ AGENT_CWD: /current/path
 
@@ -283,7 +287,7 @@ Next steps:
 |-------|----------|
 | MCP tools not available | Check `.mcp.json` state, guide through Phase 1 or prompt restart. |
 | Authorization fails | Show auth URL for manual retry, check tunnel is running and callback URL matches. |
-| Receiver won't start | Check port 3847 conflict, suggest `WEBHOOK_PORT` env var. |
+| Server won't start | Check port 3847 conflict, verify `.scottclip/.env` credentials are set. |
 | No teams found | Stop. Ask user to verify Linear workspace access. |
 | Label creation fails | Log error, continue with remaining labels, report at end. |
 | `.scottclip/` already exists | Ask: overwrite, merge, or cancel (see Re-initialization). |

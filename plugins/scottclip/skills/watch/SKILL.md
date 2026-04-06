@@ -1,18 +1,16 @@
 ---
 name: scottclip-watch
-description: This skill should be used when the user asks to "start watching", "watch for issues", "start the agent loop", "enable auto-heartbeat", "run in background", or runs the /scottclip-watch command. Starts dual-mode watch — webhook receiver for real-time Linear events plus polling heartbeat as fallback.
-version: 0.1.0
+description: This skill should be used when the user asks to "start watching", "watch for issues", "start the agent loop", "enable auto-heartbeat", "run in background", or runs the /scottclip-watch command. Starts the consolidated ScottClip server which handles webhooks, polling, MCP tools, and OAuth in a single process.
+version: 0.2.0
 ---
 
 # ScottClip Watch
 
-Start dual-mode watch: a webhook receiver for real-time Linear agent events, plus a polling heartbeat loop as a reliability fallback. Either mode can run independently.
+Start the consolidated ScottClip server: a single Hono HTTP process on port 3847 that handles webhook events, polling heartbeats (built-in timer), MCP tools (`/mcp`), and OAuth callbacks (`/oauth/callback`).
 
 **Arguments:**
 - `--interval <duration>` — Heartbeat polling interval (default: `15m`). Accepts `s`, `m`, `h` suffixes.
-- `--webhook-only` — Start only the webhook receiver (no polling).
-- `--poll-only` — Start only the polling heartbeat loop (no webhook receiver).
-- `--stop` — Stop all watch processes.
+- `--stop` — Stop the server (kills process on port 3847).
 
 **Reference files:**
 - `${CLAUDE_PLUGIN_ROOT}/references/status-mapping.md` — Linear state behavior
@@ -28,53 +26,45 @@ Parse `$ARGUMENTS` for flags:
 
 | Flag | Effect |
 |------|--------|
-| `--interval <duration>` | Set polling interval. Default `15m`. Parse duration: number + suffix (`s`=seconds, `m`=minutes, `h`=hours). |
-| `--webhook-only` | Skip Step 3 (polling). Only start the webhook receiver. |
-| `--poll-only` | Skip Step 2 (webhook). Only start the polling loop. |
-| `--stop` | Run Step 5 (stop all) and exit. |
+| `--interval <duration>` | Set polling interval. Default `15m`. Parse duration: number + suffix (`s`=seconds, `m`=minutes, `h`=hours). Convert to milliseconds for `POLL_INTERVAL`. |
+| `--stop` | Run Step 3 (stop server) and exit. |
 
-If no flags are provided, start both webhook receiver and polling (full dual-mode).
+## Step 2: Start Consolidated Server
 
-## Step 2: Start Webhook Receiver
+1. Check if the server is already running:
+   - Run `lsof -i :3847` to see if the port is in use.
+   - If already running, report: "Consolidated server already running on port 3847" and skip to Step 4.
 
-> Skip this step if `--poll-only` is set.
+2. Read `team` from `.scottclip/config.yaml` — use as `POLL_TEAM_ID`.
 
-1. Check if the webhook receiver is already running:
-   - Run `lsof -i :3847` (or the configured `WEBHOOK_PORT`) to see if the port is in use.
-   - If already running, report: "Webhook receiver already running on port 3847" and skip to Step 3.
+3. Convert `--interval` duration to milliseconds (e.g., `15m` → `900000`). Use as `POLL_INTERVAL`.
 
-2. Start the webhook receiver in the background:
+4. Start the server in the background:
    ```
-   Run via Bash (background): cd <PLUGIN_ROOT>/mcp/linear-agent && npm run webhook
+   Run via Bash (background): cd <PLUGIN_ROOT>/mcp/linear-agent && POLL_INTERVAL=<ms> POLL_TEAM_ID=<team_id> npm run start
    ```
-   `<PLUGIN_ROOT>` is the plugin's installation directory (the value of `${CLAUDE_PLUGIN_ROOT}`). Check the user's MCP configuration (`.mcp.json` or global MCP settings) to confirm the path, or use the `LINEAR_AGENT_DIR` environment variable as an override.
+   `<PLUGIN_ROOT>` is the plugin's installation directory (`${CLAUDE_PLUGIN_ROOT}`). The `.scottclip/.env` file in `AGENT_CWD` is loaded automatically by the server for credentials (LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET, LINEAR_WEBHOOK_SECRET, LINEAR_CALLBACK_HOST).
 
-3. Wait 2 seconds, then verify the receiver started:
+5. Wait 2 seconds, then verify the server started:
    - Run `lsof -i :3847` — should show a listening process.
-   - If not running, report the error and suggest checking `LINEAR_WEBHOOK_SECRET` environment variable.
+   - If not running, report the error and suggest checking `.scottclip/.env` for required credentials.
 
-4. Report: "Webhook receiver started on port 3847"
+6. Report: "Consolidated server started on port 3847"
 
-5. If the user hasn't set up a tunnel yet, suggest:
+7. If the user hasn't set up a tunnel yet, suggest:
    ```
-   To expose the receiver to Linear, run in another terminal:
-     cloudflared tunnel --url http://localhost:3847
+   To expose the server to Linear, run in another terminal:
+     cd <PLUGIN_ROOT>/mcp/linear-agent && npm run start:tunnel
    Then add the tunnel URL as a webhook in Linear: Settings → API → Webhooks
    ```
 
-## Step 3: Start Polling Loop
+## Step 3: Stop Server
 
-> Skip this step if `--webhook-only` is set.
+> Run this step when `--stop` is passed.
 
-1. Parse the interval from `--interval` flag (default: `15m`).
-
-2. Start the polling heartbeat loop using the `/loop` command:
-   ```
-   /loop <interval> /heartbeat
-   ```
-   This uses Claude Code's built-in `/loop` which runs the heartbeat at the specified interval while the session is active.
-
-3. Report: "Polling heartbeat started (every `<interval>`)"
+1. Find the server process: `lsof -i :3847 -t`
+2. If found, kill it: `kill <pid>` (or run `npm run stop` from `<PLUGIN_ROOT>/mcp/linear-agent`)
+3. Report: "ScottClip server stopped" or "No server running on port 3847"
 
 ## Step 4: Report Status
 
@@ -83,31 +73,17 @@ Display the watch configuration:
 ```
 ScottClip Watch Active
 ──────────────────────
-Webhook:  ✓ Receiver on port 3847 (or ✗ Not started)
-Tunnel:   ⚠ Run 'cloudflared tunnel --url http://localhost:3847' to expose
-Polling:  ✓ Every 15m via /loop (or ✗ Not started)
-
-Mode: dual (webhook + polling) | webhook-only | poll-only
+Server:   ✓ Running on port 3847
+  MCP:    http://localhost:3847/mcp
+  Webhook: http://localhost:3847/webhook
+  OAuth:  http://localhost:3847/oauth/callback
+Tunnel:   ⚠ Run 'npm run start:tunnel' to expose (from mcp/linear-agent/)
+Polling:  ✓ Every 15m (built into server)
 
 Events flow:
   Real-time: Linear → webhook → ack session → spawn Claude
-  Fallback:  /loop → /heartbeat → poll events + Linear issues
+  Polling:   server timer → /heartbeat → poll events + Linear issues
 ```
-
-## Step 5: Stop Watch
-
-> Run this step when `--stop` is passed.
-
-1. Stop the polling loop:
-   - Report: "Stopping polling loop — use `/loop stop` if it doesn't stop automatically."
-   - Note: `/loop` tasks are session-scoped and stop when the session ends. The `--stop` flag is informational.
-
-2. Stop the webhook receiver:
-   - Find the receiver process: `lsof -i :3847 -t`
-   - If found, kill it: `kill <pid>`
-   - Report: "Webhook receiver stopped" or "No webhook receiver running"
-
-3. Report: "ScottClip watch stopped."
 
 ## Error Handling
 
@@ -115,14 +91,13 @@ Events flow:
 |-------|----------|
 | `.scottclip/config.yaml` missing | Stop. Suggest `/scottclip-init`. |
 | `linear-agent` MCP not available | Stop. Suggest configuring the MCP server. |
-| Port 3847 already in use (not by receiver) | Report conflict. Suggest `WEBHOOK_PORT` env var. |
-| Webhook receiver fails to start | Report error, continue with poll-only mode. |
-| `/loop` not available | Report error, continue with webhook-only mode. |
+| Port 3847 already in use (not by server) | Report conflict. Suggest stopping the occupying process. |
+| Server fails to start | Report error, check `.scottclip/.env` for credentials. |
 
 ## Notes
 
-- The webhook receiver runs as a background process independent of the Claude Code session. It survives session restarts but not machine reboots.
-- The polling loop via `/loop` is session-scoped — it stops when the Claude Code session ends.
-- For persistent scheduling that survives session/machine restarts, suggest `/schedule` (cloud-based) instead of `/loop`.
-- The webhook receiver and polling heartbeat are complementary: webhooks handle real-time delegation events, polling catches anything missed and processes the broader issue queue.
+- The server runs as a background process independent of the Claude Code session. It survives session restarts but not machine reboots.
+- Polling is built into the server — no separate `/loop` command needed.
+- The server reads credentials from `.scottclip/.env` in `AGENT_CWD` (set at init time).
 - The heartbeat lockfile (`.scottclip/.heartbeat-lock`) prevents concurrent heartbeats even if both webhook-spawned and poll-spawned sessions attempt to run simultaneously.
+- For persistent scheduling that survives machine restarts, suggest using a process manager (e.g., `launchd`, `systemd`, `pm2`) to keep the server running.

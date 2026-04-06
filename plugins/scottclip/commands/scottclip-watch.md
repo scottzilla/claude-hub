@@ -1,6 +1,6 @@
 ---
-description: Start ScottClip watch mode (webhook receiver + polling heartbeat)
-argument-hint: "[--interval 15m] [--webhook-only] [--poll-only] [--stop]"
+description: Start ScottClip watch mode (consolidated server with webhook + polling)
+argument-hint: "[--interval 15m] [--stop]"
 ---
 
 Start or stop ScottClip watch mode using the scottclip-watch skill.
@@ -9,8 +9,6 @@ Arguments passed: $ARGUMENTS
 
 Parse the arguments:
 - `--interval <duration>` — Heartbeat polling interval (default: 15m). Supports s/m/h suffixes.
-- `--webhook-only` — Only start the webhook receiver, no polling.
-- `--poll-only` — Only start the polling loop, no webhook receiver.
-- `--stop` — Stop all watch processes (webhook receiver + polling loop).
+- `--stop` — Stop the consolidated server (kills process on port 3847).
 
 Execute the watch procedure from the skill.
