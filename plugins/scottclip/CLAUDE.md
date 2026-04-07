@@ -70,7 +70,6 @@ The plugin bundles a Hono-based HTTP server that Claude Code connects to via HTT
 - `src/spawn.ts` — spawns Claude agent sessions for incoming events
 - `src/webhook.ts` — handles Linear webhook POST at `/webhook`
 - `src/oauth.ts` — OAuth 2.0 callback handler at `/oauth/callback`
-- `src/polling.ts` — built-in polling timer (fires `/heartbeat` at `POLL_INTERVAL` ms)
 - `src/env.ts` — loads credentials from `.scottclip/.env`
 
 The server previously had a separate `webhook/receiver.ts` — that file was deleted when the architecture was consolidated into the single Hono server.

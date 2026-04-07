@@ -1,15 +1,14 @@
 ---
 name: scottclip-watch
-description: This skill should be used when the user asks to "start watching", "watch for issues", "start the agent loop", "enable auto-heartbeat", "run in background", or runs the /scottclip-watch command. Starts the consolidated ScottClip server which handles webhooks, polling, MCP tools, and OAuth in a single process.
-version: 0.2.0
+description: This skill should be used when the user asks to "start watching", "watch for issues", "start the agent loop", "enable auto-heartbeat", "run in background", or runs the /scottclip-watch command. Starts the consolidated ScottClip server which handles webhooks, MCP tools, and OAuth in a single process.
+version: 0.3.0
 ---
 
 # ScottClip Watch
 
-Start the consolidated ScottClip server: a single Hono HTTP process on port 3847 that handles webhook events, polling heartbeats (built-in timer), MCP tools (`/mcp`), and OAuth callbacks (`/oauth/callback`).
+Start the consolidated ScottClip server: a single Hono HTTP process on port 3847 that handles webhook events, MCP tools (`/mcp`), and OAuth callbacks (`/oauth/callback`).
 
 **Arguments:**
-- `--interval <duration>` — Heartbeat polling interval (default: `15m`). Accepts `s`, `m`, `h` suffixes.
 - `--stop` — Stop the server (kills process on port 3847).
 
 **Reference files:**
@@ -26,7 +25,6 @@ Parse `$ARGUMENTS` for flags:
 
 | Flag | Effect |
 |------|--------|
-| `--interval <duration>` | Set polling interval. Default `15m`. Parse duration: number + suffix (`s`=seconds, `m`=minutes, `h`=hours). Convert to milliseconds for `POLL_INTERVAL`. |
 | `--stop` | Run Step 3 (stop server) and exit. |
 
 ## Step 2: Start Consolidated Server
@@ -35,31 +33,27 @@ Parse `$ARGUMENTS` for flags:
    - Run `lsof -i :3847` to see if the port is in use.
    - If already running, report: "Consolidated server already running on port 3847" and skip to Step 4.
 
-2. Read `team` from `.scottclip/config.yaml` — use as `POLL_TEAM_ID`.
-
-3. Convert `--interval` duration to milliseconds (e.g., `15m` → `900000`). Use as `POLL_INTERVAL`.
-
-4. Build the server (clean + install + compile):
+2. Build the server (clean + install + compile):
    ```
    Run via Bash: cd <PLUGIN_ROOT>/mcp/linear-agent && rm -rf dist && npm install && npm run build
    ```
    This ensures the latest code is compiled. Must succeed before starting.
 
-5. Start the server as a background daemon from the **target repo directory** (so `.scottclip/.env` is found):
+3. Start the server as a background daemon from the **target repo directory** (so `.scottclip/.env` is found):
    ```
-   Run via Bash: cd <AGENT_CWD> && nohup node <PLUGIN_ROOT>/mcp/linear-agent/dist/server.js > .scottclip/server.log 2>&1 & echo $!
+   Run via Bash: cd <AGENT_CWD> && AGENT_CWD=<AGENT_CWD> nohup node <PLUGIN_ROOT>/mcp/linear-agent/dist/server.js > .scottclip/server.log 2>&1 & echo $!
    ```
-   Save the printed PID. Set env vars before the command: `POLL_INTERVAL=<ms> POLL_TEAM_ID=<team_id>`.
+   Save the printed PID.
 
    `<PLUGIN_ROOT>` is `${CLAUDE_PLUGIN_ROOT}`. `<AGENT_CWD>` is from `.scottclip/.env` or the current working directory. The server loads `.scottclip/.env` automatically for credentials.
 
-6. Wait 2 seconds, then verify the server started:
+4. Wait 2 seconds, then verify the server started:
    - Run `lsof -i :3847` — should show a listening process.
    - If not running, report the error and suggest checking `.scottclip/server.log` and `.scottclip/.env`.
 
-7. Report: "Consolidated server started on port 3847"
+5. Report: "Consolidated server started on port 3847"
 
-8. If the user hasn't set up a tunnel yet, suggest:
+6. If the user hasn't set up a tunnel yet, suggest:
    ```
    To expose the server to Linear, run in another terminal:
      cd <PLUGIN_ROOT>/mcp/linear-agent && npm run start:tunnel
@@ -86,11 +80,10 @@ Server:   ✓ Running on port 3847
   Webhook: http://localhost:3847/webhook
   OAuth:  http://localhost:3847/oauth/callback
 Tunnel:   ⚠ Run 'npm run start:tunnel' to expose (from mcp/linear-agent/)
-Polling:  ✓ Every 15m (built into server)
 
 Events flow:
   Real-time: Linear → webhook → ack session → spawn Claude
-  Polling:   server timer → /heartbeat → poll events + Linear issues
+  On-demand: Run /heartbeat manually, or set up a cron job for periodic issue checking
 ```
 
 ## Error Handling
@@ -105,7 +98,7 @@ Events flow:
 ## Notes
 
 - The server runs as a background process independent of the Claude Code session. It survives session restarts but not machine reboots.
-- Polling is built into the server — no separate `/loop` command needed.
+- For periodic issue checking, run `/heartbeat` manually or configure a cron job (e.g., `*/15 * * * * claude /heartbeat`). No built-in polling timer is included in the server.
 - The server reads credentials from `.scottclip/.env` in `AGENT_CWD` (set at init time).
-- The heartbeat lockfile (`.scottclip/.heartbeat-lock`) prevents concurrent heartbeats even if both webhook-spawned and poll-spawned sessions attempt to run simultaneously.
+- The heartbeat lockfile (`.scottclip/.heartbeat-lock`) prevents concurrent heartbeats even if multiple webhook-spawned sessions attempt to run simultaneously.
 - For persistent scheduling that survives machine restarts, suggest using a process manager (e.g., `launchd`, `systemd`, `pm2`) to keep the server running.

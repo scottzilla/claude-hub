@@ -18,15 +18,12 @@ import { registerEventTools } from "./tools/events.js";
 import { registerStateTools } from "./tools/states.js";
 import { createWebhookRoute } from "./webhook.js";
 import { createOAuthRoute, createStatusRoute } from "./oauth.js";
-import { startPolling, stopPolling } from "./polling.js";
 import { loadDotEnv } from "./env.js";
 
 // Load .scottclip/.env before anything reads process.env
 loadDotEnv();
 
 const PORT = parseInt(process.env.WEBHOOK_PORT || "3847", 10);
-const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || "900000", 10); // 15 minutes default
-const POLL_TEAM_ID = process.env.POLL_TEAM_ID || "";
 
 // --- MCP Server Setup ---
 
@@ -126,17 +123,9 @@ async function main() {
     }
   );
 
-  // Start polling if configured
-  if (POLL_TEAM_ID && POLL_INTERVAL > 0) {
-    startPolling(POLL_TEAM_ID, POLL_INTERVAL);
-  } else if (!POLL_TEAM_ID) {
-    console.log("Polling disabled: POLL_TEAM_ID not set");
-  }
-
   // Graceful shutdown
   const shutdown = () => {
     console.log("Shutting down...");
-    stopPolling();
     for (const [id, transport] of transports) {
       transport.close?.();
       transports.delete(id);
