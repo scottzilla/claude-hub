@@ -2,7 +2,6 @@ import { spawn } from "node:child_process";
 import { gql } from "./graphql.js";
 
 const CLAUDE_BIN = process.env.CLAUDE_BIN || "claude";
-const TARGET_REPO = process.env.AGENT_CWD;
 
 const ACK_MUTATION = `
   mutation AckSession($input: AgentActivityCreateInput!) {
@@ -75,7 +74,8 @@ export async function ackSession(sessionId: string, message = "Starting up..."):
 }
 
 export async function spawnClaudeSession(event: Record<string, unknown>): Promise<void> {
-  if (!TARGET_REPO) {
+  const targetRepo = process.env.AGENT_CWD;
+  if (!targetRepo) {
     console.error("AGENT_CWD not set — cannot spawn Claude session");
     return;
   }
@@ -89,7 +89,7 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
   console.log(`Spawning Claude for ${issueIdentifier} (session ${sessionId})`);
 
   const child = spawn(CLAUDE_BIN, cliArgs, {
-    cwd: TARGET_REPO,
+    cwd: targetRepo,
     stdio: "ignore",
     detached: true,
     env: { ...process.env },

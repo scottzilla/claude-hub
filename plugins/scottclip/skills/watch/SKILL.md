@@ -39,19 +39,27 @@ Parse `$ARGUMENTS` for flags:
 
 3. Convert `--interval` duration to milliseconds (e.g., `15m` → `900000`). Use as `POLL_INTERVAL`.
 
-4. Start the server in the background:
+4. Build the server (clean + install + compile):
    ```
-   Run via Bash (background): cd <PLUGIN_ROOT>/mcp/linear-agent && POLL_INTERVAL=<ms> POLL_TEAM_ID=<team_id> npm run start
+   Run via Bash: cd <PLUGIN_ROOT>/mcp/linear-agent && rm -rf dist && npm install && npm run build
    ```
-   `<PLUGIN_ROOT>` is the plugin's installation directory (`${CLAUDE_PLUGIN_ROOT}`). The `.scottclip/.env` file in `AGENT_CWD` is loaded automatically by the server for credentials (LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET, LINEAR_WEBHOOK_SECRET, LINEAR_CALLBACK_HOST).
+   This ensures the latest code is compiled. Must succeed before starting.
 
-5. Wait 2 seconds, then verify the server started:
+5. Start the server as a background daemon from the **target repo directory** (so `.scottclip/.env` is found):
+   ```
+   Run via Bash: cd <AGENT_CWD> && nohup node <PLUGIN_ROOT>/mcp/linear-agent/dist/server.js > .scottclip/server.log 2>&1 & echo $!
+   ```
+   Save the printed PID. Set env vars before the command: `POLL_INTERVAL=<ms> POLL_TEAM_ID=<team_id>`.
+
+   `<PLUGIN_ROOT>` is `${CLAUDE_PLUGIN_ROOT}`. `<AGENT_CWD>` is from `.scottclip/.env` or the current working directory. The server loads `.scottclip/.env` automatically for credentials.
+
+6. Wait 2 seconds, then verify the server started:
    - Run `lsof -i :3847` — should show a listening process.
-   - If not running, report the error and suggest checking `.scottclip/.env` for required credentials.
+   - If not running, report the error and suggest checking `.scottclip/server.log` and `.scottclip/.env`.
 
-6. Report: "Consolidated server started on port 3847"
+7. Report: "Consolidated server started on port 3847"
 
-7. If the user hasn't set up a tunnel yet, suggest:
+8. If the user hasn't set up a tunnel yet, suggest:
    ```
    To expose the server to Linear, run in another terminal:
      cd <PLUGIN_ROOT>/mcp/linear-agent && npm run start:tunnel
