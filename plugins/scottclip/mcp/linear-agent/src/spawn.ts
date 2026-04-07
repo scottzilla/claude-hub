@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import { writeFile, mkdir, unlink } from "node:fs/promises";
-import { openSync } from "node:fs";
+import { writeFile, mkdir, unlink, readFile } from "node:fs/promises";
+import { createWriteStream, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { gql } from "./graphql.js";
 
@@ -230,20 +230,25 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
   const logPath = join(sessionsDir, `${sessionId}.log`);
   await writeFile(promptPath, prompt);
 
-  // Pipe prompt file to claude via stdin, log output
-  const logFd = openSync(logPath, "w");
-  const promptFd = openSync(promptPath, "r");
+  // Create log file write stream
+  const logStream = createWriteStream(logPath);
 
+  // Spawn with pipe for stdout so we can read it
   const child = spawn(CLAUDE_BIN, [
     "-p",
     "--permission-mode", "bypassPermissions",
     "--allowedTools", "mcp__linear-agent*,Read,Write,Edit,Bash,Grep,Glob,Agent",
   ], {
     cwd: targetRepo,
-    stdio: [promptFd, logFd, logFd],
+    stdio: ["pipe", "pipe", "pipe"],
     detached: true,
     env: { ...process.env },
   });
+
+  // Feed prompt via stdin
+  const promptContent = readFileSync(promptPath, "utf-8");
+  child.stdin?.write(promptContent);
+  child.stdin?.end();
 
   child.unref();
 
@@ -252,13 +257,58 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
   await writeFile(sessionFile, String(child.pid));
   console.log(`Session file written: ${sessionFile} (PID ${child.pid})`);
 
-  child.on("exit", async () => {
-    try {
-      await unlink(sessionFile);
-      console.log(`Session ${sessionId} exited, cleaned up ${sessionFile}`);
-    } catch {
-      // File may already be removed by stop handler
+  // Stream stdout to both log file and Linear activities
+  let buffer = "";
+  let lastActivityTime = 0;
+  const ACTIVITY_INTERVAL = 3000; // Post activity every 3 seconds max
+
+  child.stdout?.on("data", (chunk: Buffer) => {
+    const text = chunk.toString();
+    logStream.write(text);
+    buffer += text;
+
+    const now = Date.now();
+    if (now - lastActivityTime >= ACTIVITY_INTERVAL && buffer.trim()) {
+      lastActivityTime = now;
+      const activityText = buffer.trim();
+      buffer = "";
+      // Post as ephemeral thought (gets replaced by next one)
+      ackSession(sessionId, activityText).catch(() => {});
     }
+  });
+
+  child.stderr?.on("data", (chunk: Buffer) => {
+    logStream.write(chunk.toString());
+  });
+
+  // On exit, post final response
+  child.on("exit", async (code) => {
+    // Flush any remaining buffer
+    if (buffer.trim()) {
+      logStream.write(buffer);
+    }
+    logStream.end();
+
+    // Read the full log for the final response
+    try {
+      const fullOutput = await readFile(logPath, "utf-8");
+      if (fullOutput.trim()) {
+        // Post final output as a non-ephemeral response activity
+        await gql(ACK_MUTATION, {
+          input: {
+            agentSessionId: sessionId,
+            content: { type: "response", body: fullOutput.trim() },
+          },
+        }).catch((err) => console.error("Failed to post final activity:", err));
+      }
+    } catch (err) {
+      console.error("Failed to read session log:", err);
+    }
+
+    // Clean up session files
+    try { await unlink(sessionFile); } catch {}
+    try { await unlink(promptPath); } catch {}
+    console.log(`Session ${sessionId} exited (code ${code})`);
   });
 
   child.on("error", (err) => {
