@@ -33,6 +33,7 @@ const GET_ISSUE_QUERY = `
           createdAt
         }
       }
+      attachments { nodes { id title url subtitle metadata } }
     }
   }
 `;
@@ -55,6 +56,7 @@ interface IssueData {
   labels?: { nodes: Array<{ id: string; name: string }> };
   parent?: { id: string; identifier: string; title: string };
   comments?: { nodes: Array<{ id: string; body: string; user: { id: string; name: string }; createdAt: string }> };
+  attachments?: { nodes: Array<{ id: string; title: string; url: string; subtitle?: string; metadata?: Record<string, unknown> }> };
 }
 
 async function fetchIssue(issueId: string): Promise<IssueData | null> {
@@ -112,6 +114,15 @@ export function buildClaudeArgs(
 
   if (issueDescription) {
     lines.push(``, `## Issue Description`, issueDescription);
+  }
+
+  const attachments = fetchedIssue?.attachments?.nodes || [];
+  if (attachments.length > 0) {
+    lines.push(``, `## Attachments`);
+    for (const a of attachments) {
+      const suffix = a.subtitle ? ` — ${a.subtitle}` : "";
+      lines.push(`- [${a.title}](${a.url})${suffix}`);
+    }
   }
 
   if (userMessage) {

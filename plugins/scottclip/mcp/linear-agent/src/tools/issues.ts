@@ -17,6 +17,7 @@ const ISSUE_FIELDS = `
   labels { nodes { id name color } }
   parent { id identifier title }
   children { nodes { id identifier title state { name } } }
+  attachments { nodes { id title url subtitle metadata } }
 `;
 
 const LIST_ISSUES_QUERY = `
