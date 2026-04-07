@@ -59,20 +59,32 @@ export function createWebhookRoute(): Hono {
       // Respond 200 immediately, then handle async work
       const response = c.text("OK", 200);
 
-      const sessionData = event.data || event.agentSession;
-      if (event.type === "AgentSessionEvent" && sessionData?.id) {
+      if (event.type === "AgentSessionEvent") {
+        const sessionData = event.agentSession || event.data;
+        if (!sessionData?.id) return response;
+
         const sessionId = sessionData.id as string;
 
-        if (event.action === "created") {
-          ackSession(sessionId, "Starting up...").catch((err) =>
+        // Check team filter — only process issues for our configured team
+        const issueTeamId = sessionData.issue?.teamId || sessionData.issue?.team?.id;
+        const configuredTeamId = process.env.POLL_TEAM_ID;
+        if (configuredTeamId && issueTeamId && issueTeamId !== configuredTeamId) {
+          console.log(`Ignoring event for team ${issueTeamId} (configured: ${configuredTeamId})`);
+          return response;
+        }
+
+        if (event.action === "created" || event.action === "prompted") {
+          // Ack FIRST (must respond within 5s), then fetch issue and spawn
+          const ackMsg = event.action === "created" ? "Starting up..." : "Reading your message...";
+          ackSession(sessionId, ackMsg).catch((err) =>
             console.error("Ack error:", err)
           );
           spawnClaudeSession(event).catch((err) => console.error("Spawn error:", err));
-        } else if (event.action === "prompted") {
-          ackSession(sessionId, "Reading your message...").catch((err) =>
-            console.error("Ack error:", err)
-          );
-          spawnClaudeSession(event).catch((err) => console.error("Spawn error:", err));
+        } else if (event.action === "stopped") {
+          // User requested stop — acknowledge and don't spawn
+          console.log(`Stop signal received for session ${sessionId}`);
+          // TODO: kill any running Claude process for this session
+          // For now, just log it — spawned sessions are detached processes
         }
       }
 

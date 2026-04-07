@@ -132,7 +132,7 @@ export function buildClaudeArgs(
   // Use fetched comments if we have them and no previousComments from webhook
   const commentsToShow = previousComments && previousComments.length > 0
     ? previousComments
-    : fetchedIssue?.comments?.nodes?.map((c) => ({ body: c.body, user: { name: c.user.name } })) || [];
+    : fetchedIssue?.comments?.nodes?.map((c) => ({ body: c.body, user: { name: c.user?.name || "unknown" } })) || [];
 
   if (commentsToShow.length > 0) {
     lines.push(``, `## Recent Comments`);
