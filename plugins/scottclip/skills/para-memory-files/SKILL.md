@@ -1,5 +1,5 @@
 ---
-name: para-memory-files
+name: scottclip-para-memory-files
 description: >
   File-based memory system using Tiago Forte's PARA method. Use this skill whenever
   you need to store, retrieve, update, or organize knowledge across sessions. Covers

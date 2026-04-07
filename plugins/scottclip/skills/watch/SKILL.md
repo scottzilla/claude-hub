@@ -1,5 +1,5 @@
 ---
-name: watch
+name: scottclip-watch
 description: This skill should be used when the user asks to "start watching", "watch for issues", "start the agent loop", "enable auto-heartbeat", "run in background", or runs the /sc-watch command. Starts the ScottClip MCP server and a recurring heartbeat loop.
 version: 0.1.0
 ---
@@ -12,7 +12,7 @@ Start the MCP server and a recurring heartbeat loop.
 
 ### Step 1: Start the MCP Server
 
-Invoke the `scottclip:start` skill using the Skill tool. If `--stop` was passed in the arguments, pass it through and stop after the skill completes.
+Invoke the `scottclip:scottclip-start` skill using the Skill tool. If `--stop` was passed in the arguments, pass it through and stop after the skill completes.
 
 ### Step 2: Start Heartbeat Loop
 

@@ -1,5 +1,5 @@
 ---
-name: heartbeat
+name: scottclip-heartbeat
 description: This skill should be used when the user asks to "run a heartbeat", "run the agent loop", "process Linear issues", "check for work", or runs the /heartbeat command. Executes the ScottClip heartbeat — picks up Linear issues, resolves personas, does work, and reports back.
 version: 0.1.0
 ---

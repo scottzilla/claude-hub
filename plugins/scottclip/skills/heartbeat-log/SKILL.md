@@ -1,5 +1,5 @@
 ---
-name: heartbeat-log
+name: scottclip-heartbeat-log
 description: This skill should be used when the user asks to "show heartbeat log", "heartbeat history", "what has scottclip done", "show agent activity", "summarize heartbeats", or wants to analyze past heartbeat activity. Parses heartbeat-log.jsonl for summaries and analytics.
 version: 0.1.0
 ---

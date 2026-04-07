@@ -1,5 +1,5 @@
 ---
-name: persona-create
+name: scottclip-persona-create
 description: This skill should be used when the user asks to "create a persona", "add a new persona", "set up a new agent role", "add a scottclip persona", or runs the /persona-create command. Interactively creates a new ScottClip persona with SOUL.md, TOOLS.md, and config.yaml.
 version: 0.1.0
 ---

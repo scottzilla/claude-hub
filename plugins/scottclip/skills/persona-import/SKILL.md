@@ -1,5 +1,5 @@
 ---
-name: persona-import
+name: scottclip-persona-import
 description: This skill should be used when the user asks to "import a paperclip agent", "convert paperclip to scottclip", "migrate from paperclip", "import persona from paperclip", or wants to convert existing Paperclip agent directories into ScottClip persona format.
 version: 0.1.0
 ---

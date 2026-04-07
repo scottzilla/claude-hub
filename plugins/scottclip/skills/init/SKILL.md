@@ -1,5 +1,5 @@
 ---
-name: init
+name: scottclip-init
 description: This skill should be used when the user asks to "initialize scottclip", "set up scottclip", "scottclip init", "configure scottclip for this repo", or runs the /scottclip-init command. Scaffolds a repo with ScottClip config, persona directories, and Linear labels.
 version: 0.2.0
 ---

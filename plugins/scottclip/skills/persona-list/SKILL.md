@@ -1,5 +1,5 @@
 ---
-name: persona-list
+name: scottclip-persona-list
 description: This skill should be used when the user asks to "list personas", "show personas", "what personas are configured", "show scottclip agents", or runs the /persona-list command. Lists all configured ScottClip personas with their runtime settings.
 version: 0.1.0
 ---
