@@ -234,13 +234,8 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
   // Write session file so stop handler can kill the process
   const sessionsDir = join(targetRepo, ".scottclip", "sessions");
   await mkdir(sessionsDir, { recursive: true });
-  const sessionFile = join(sessionsDir, `${sessionId}.json`);
-  await writeFile(sessionFile, JSON.stringify({
-    pid: child.pid,
-    issueIdentifier,
-    sessionId,
-    spawnedAt: new Date().toISOString(),
-  }, null, 2));
+  const sessionFile = join(sessionsDir, `${sessionId}.pid`);
+  await writeFile(sessionFile, String(child.pid));
   console.log(`Session file written: ${sessionFile} (PID ${child.pid})`);
 
   child.on("exit", async () => {

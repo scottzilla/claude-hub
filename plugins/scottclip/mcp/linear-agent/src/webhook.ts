@@ -85,13 +85,12 @@ export function createWebhookRoute(): Hono {
           console.log(`Stop signal received for session ${sessionId}`);
           const agentCwd = process.env.AGENT_CWD || process.cwd();
           const sessionsDir = join(agentCwd, ".scottclip", "sessions");
-          const sessionFile = join(sessionsDir, `${sessionId}.json`);
+          const sessionFile = join(sessionsDir, `${sessionId}.pid`);
           try {
-            const raw = await readFile(sessionFile, "utf-8");
-            const sessionInfo = JSON.parse(raw) as { pid?: number };
-            if (sessionInfo.pid) {
-              process.kill(sessionInfo.pid, "SIGTERM");
-              console.log(`Killed session ${sessionId} (PID ${sessionInfo.pid})`);
+            const pid = parseInt(await readFile(sessionFile, "utf-8"), 10);
+            if (pid) {
+              process.kill(pid, "SIGTERM");
+              console.log(`Killed session ${sessionId} (PID ${pid})`);
             }
             await unlink(sessionFile);
           } catch {
