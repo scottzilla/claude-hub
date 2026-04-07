@@ -85,15 +85,9 @@ export function createWebhookRoute(): Hono {
           return response;
         }
 
-        if (event.action === "created" || event.action === "prompted") {
-          // Ack FIRST (must respond within 5s), then fetch issue and spawn
-          const ackMsg = event.action === "created" ? "Starting up..." : "Reading your message...";
-          ackSession(sessionId, ackMsg).catch((err) =>
-            console.error("Ack error:", err)
-          );
-          spawnClaudeSession(event).catch((err) => console.error("Spawn error:", err));
-        } else if (event.action === "stopped") {
-          // User requested stop — kill the spawned Claude process if still running
+        // Check for stop signal — comes as action "prompted" with agentActivity.signal "stop"
+        const signal = event.agentActivity?.signal;
+        if (signal === "stop") {
           console.log(`Stop signal received for session ${sessionId}`);
           const agentCwd = process.env.AGENT_CWD || process.cwd();
           const sessionsDir = join(agentCwd, ".scottclip", "sessions");
@@ -108,6 +102,13 @@ export function createWebhookRoute(): Hono {
           } catch {
             console.log(`No active session file for ${sessionId} (may have already finished)`);
           }
+        } else if (event.action === "created" || event.action === "prompted") {
+          // Ack FIRST (must respond within 5s), then fetch issue and spawn
+          const ackMsg = event.action === "created" ? "Starting up..." : "Reading your message...";
+          ackSession(sessionId, ackMsg).catch((err) =>
+            console.error("Ack error:", err)
+          );
+          spawnClaudeSession(event).catch((err) => console.error("Spawn error:", err));
         }
       }
 
