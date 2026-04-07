@@ -1,12 +1,9 @@
 import { Hono } from "hono";
-import { createHmac, randomUUID } from "node:crypto";
-import { writeFile, mkdir, readFile, unlink } from "node:fs/promises";
+import { createHmac } from "node:crypto";
+import { readFile, unlink } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { AGENT_DIR } from "./auth.js";
 import { ackSession, spawnClaudeSession, moveIssueToState } from "./spawn.js";
-
-const EVENTS_DIR = join(AGENT_DIR, "events");
 
 function getConfiguredTeamId(): string | null {
   const agentCwd = process.env.AGENT_CWD || process.cwd();
@@ -36,10 +33,6 @@ export function verifySignature(
   return match;
 }
 
-async function ensureEventsDir(): Promise<void> {
-  await mkdir(EVENTS_DIR, { recursive: true });
-}
-
 export function createWebhookRoute(): Hono {
   const app = new Hono();
 
@@ -55,18 +48,8 @@ export function createWebhookRoute(): Hono {
 
     try {
       const event = JSON.parse(body);
-      const enriched = {
-        ...event,
-        receivedAt: new Date().toISOString(),
-      };
 
-      await ensureEventsDir();
-      const filename = `${Date.now()}-${randomUUID()}.json`;
-      await writeFile(join(EVENTS_DIR, filename), JSON.stringify(enriched, null, 2));
-
-      console.log(
-        `Event received: ${event.type || "unknown"} (${event.action || "?"}) -> ${filename}`
-      );
+      console.log(`Event received: ${event.type || "unknown"} (${event.action || "?"})`);
 
       // Respond 200 immediately, then handle async work
       const response = c.text("OK", 200);

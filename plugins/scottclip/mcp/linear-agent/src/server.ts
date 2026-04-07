@@ -14,7 +14,6 @@ import { registerLabelTools } from "./tools/labels.js";
 import { registerTeamTools } from "./tools/teams.js";
 import { registerDocumentTools } from "./tools/documents.js";
 import { registerSessionTools } from "./tools/sessions.js";
-import { registerEventTools } from "./tools/events.js";
 import { registerStateTools } from "./tools/states.js";
 import { createWebhookRoute } from "./webhook.js";
 import { createOAuthRoute, createStatusRoute } from "./oauth.js";
@@ -40,7 +39,6 @@ function createMcpServer(): McpServer {
   registerTeamTools(server);
   registerDocumentTools(server);
   registerSessionTools(server);
-  registerEventTools(server);
   registerStateTools(server);
 
   return server;
