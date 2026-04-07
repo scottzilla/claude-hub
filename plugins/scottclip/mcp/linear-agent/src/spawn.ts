@@ -21,31 +21,67 @@ export function buildClaudeArgs(event: Record<string, unknown>): ClaudeArgs {
   const session = (event.agentSession || event.data) as Record<string, unknown> | undefined;
   const issue = session?.issue as Record<string, unknown> | undefined;
   const comment = session?.comment as Record<string, unknown> | undefined;
+  const creator = session?.creator as Record<string, unknown> | undefined;
+  const previousComments = event.previousComments as Array<Record<string, unknown>> | undefined;
+  const guidance = event.guidance as string | undefined;
+  const promptContext = event.promptContext as string | undefined;
 
   const issueIdentifier = (issue?.identifier || session?.issueIdentifier || session?.issueId || "unknown") as string;
+  const issueTitle = (issue?.title || "unknown") as string;
+  const issueDescription = issue?.description as string | undefined;
+  const issueUrl = (issue?.url || session?.url || "") as string;
   const sessionId = (session?.id || "unknown") as string;
-  const eventType = (event.type as string) || "unknown";
   const action = (event.action as string) || "unknown";
-
-  const promptBody = comment?.body as string | undefined;
-  const promptContext = session?.promptContext as string | undefined;
+  const userMessage = comment?.body as string | undefined;
+  const userName = (creator?.name || "someone") as string;
 
   const lines = [
-    `Linear agent event: ${eventType} (${action})`,
-    `Session: ${sessionId}`,
-    `Issue: ${issueIdentifier}`,
+    `You are responding to a Linear agent session.`,
+    ``,
+    `## Session`,
+    `- Session ID: ${sessionId}`,
+    `- Action: ${action}`,
+    `- Issue: ${issueIdentifier} — ${issueTitle}`,
   ];
 
-  if (promptBody) {
-    lines.push("", `User message: ${promptBody}`);
+  if (issueUrl) {
+    lines.push(`- URL: ${issueUrl}`);
   }
+
+  if (issueDescription) {
+    lines.push(``, `## Issue Description`, issueDescription);
+  }
+
+  if (userMessage) {
+    lines.push(``, `## Message from ${userName}`, userMessage);
+  }
+
+  if (previousComments && previousComments.length > 0) {
+    lines.push(``, `## Previous Comments`);
+    for (const c of previousComments) {
+      const author = (c.user as Record<string, unknown>)?.name || "unknown";
+      lines.push(`**${author}:** ${c.body}`);
+    }
+  }
+
   if (promptContext) {
-    lines.push("", "Context:", promptContext);
+    lines.push(``, `## Context`, promptContext);
+  }
+
+  if (guidance) {
+    lines.push(``, `## Workspace Guidance`, guidance);
   }
 
   lines.push(
-    "",
-    `Run /heartbeat --issue ${issueIdentifier} to process this issue. The agent session is already acknowledged.`
+    ``,
+    `## Instructions`,
+    `Respond to this request directly. Use linear-agent MCP tools to:`,
+    `- Read the full issue if you need more context (linear_get_issue)`,
+    `- Post a comment with your response (linear_save_comment)`,
+    `- Update the issue state if appropriate (linear_save_issue)`,
+    `- Report progress via the agent session (linear_create_activity with agentSessionId: "${sessionId}")`,
+    ``,
+    `Do NOT run /heartbeat. You have all the context you need.`,
   );
 
   const prompt = lines.join("\n");
