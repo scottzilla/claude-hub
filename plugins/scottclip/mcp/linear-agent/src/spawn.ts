@@ -257,6 +257,8 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
     "-p",
     "--permission-mode", "bypassPermissions",
     "--allowedTools", "mcp__linear-agent*,Read,Write,Edit,Bash,Grep,Glob,Agent",
+    "--output-format", "stream-json",
+    "--verbose",
   ], {
     cwd: targetRepo,
     stdio: ["pipe", "pipe", "pipe"],
@@ -269,30 +271,76 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
   child.stdin?.write(promptContent);
   child.stdin?.end();
 
-  child.unref();
-
   // Write session PID file so stop handler can kill the process
   const sessionFile = join(sessionsDir, `${sessionId}.pid`);
   await writeFile(sessionFile, String(child.pid));
   console.log(`Session file written: ${sessionFile} (PID ${child.pid})`);
 
-  // Stream stdout to both log file and Linear activities
-  let buffer = "";
-  let lastActivityTime = 0;
-  const ACTIVITY_INTERVAL = 3000; // Post activity every 3 seconds max
+  // Parse stream-json lines and post ephemeral activities to Linear
+  // Without --include-partial-messages, events are complete turns:
+  //   assistant — full message with content array (text + tool_use blocks)
+  //   result    — final answer string
+  let lastCapturedResult = "";
+  let lastTextPostTime = 0;
+  let lineBuffer = "";
+  const TEXT_DEBOUNCE_MS = 3000;
 
   child.stdout?.on("data", (chunk: Buffer) => {
-    const text = chunk.toString();
-    logStream.write(text);
-    buffer += text;
+    const raw = chunk.toString();
+    logStream.write(raw);
+    lineBuffer += raw;
 
-    const now = Date.now();
-    if (now - lastActivityTime >= ACTIVITY_INTERVAL && buffer.trim()) {
-      lastActivityTime = now;
-      const activityText = buffer.trim();
-      buffer = "";
-      // Post as ephemeral thought (gets replaced by next one)
-      ackSession(sessionId, activityText).catch(() => {});
+    // Process all complete newline-delimited JSON lines
+    const lines = lineBuffer.split("\n");
+    // Last element may be an incomplete line — keep it in the buffer
+    lineBuffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // Silently skip non-JSON lines (e.g. ANSI diagnostics)
+      let ev: Record<string, unknown>;
+      try {
+        ev = JSON.parse(trimmed) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+
+      const type = ev.type as string | undefined;
+
+      if (type === "assistant") {
+        // Complete assistant turn — walk content blocks
+        const message = ev.message as Record<string, unknown> | undefined;
+        const content = message?.content as Array<Record<string, unknown>> | undefined;
+        if (!Array.isArray(content)) continue;
+
+        for (const block of content) {
+          if (block.type === "text" && typeof block.text === "string" && block.text.trim()) {
+            // Debounce ephemeral thought posts for rapid successive turns
+            const now = Date.now();
+            if (now - lastTextPostTime >= TEXT_DEBOUNCE_MS) {
+              lastTextPostTime = now;
+              ackSession(sessionId, block.text.trim()).catch((err) =>
+                console.error("Failed to post text activity:", err),
+              );
+            }
+          } else if (block.type === "tool_use" && typeof block.name === "string") {
+            gql(ACK_MUTATION, {
+              input: {
+                agentSessionId: sessionId,
+                content: { type: "action", action: `Using tool: ${block.name}` },
+                ephemeral: true,
+              },
+            }).catch((err) => console.error("Failed to post tool activity:", err));
+          }
+        }
+      } else if (type === "result") {
+        // Final result — capture for use in the exit handler
+        if (typeof ev.result === "string") {
+          lastCapturedResult = ev.result;
+        }
+      }
     }
   });
 
@@ -302,26 +350,42 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
 
   // On exit, post final response
   child.on("exit", async (code) => {
-    // Flush any remaining buffer
-    if (buffer.trim()) {
-      logStream.write(buffer);
+    // Flush any remaining incomplete line into the log
+    if (lineBuffer.trim()) {
+      logStream.write(lineBuffer);
     }
     logStream.end();
 
-    // Read the full log for the final response
-    try {
-      const fullOutput = await readFile(logPath, "utf-8");
-      if (fullOutput.trim()) {
-        // Post final output as a non-ephemeral response activity
-        await gql(ACK_MUTATION, {
-          input: {
-            agentSessionId: sessionId,
-            content: { type: "response", body: fullOutput.trim() },
-          },
-        }).catch((err) => console.error("Failed to post final activity:", err));
+    // Use the captured result event; fall back to scanning the log file
+    let finalBody = lastCapturedResult.trim();
+    if (!finalBody) {
+      try {
+        const fullLog = await readFile(logPath, "utf-8");
+        for (const line of fullLog.split("\n").reverse()) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+            if (parsed.type === "result" && typeof parsed.result === "string") {
+              finalBody = parsed.result.trim();
+              break;
+            }
+          } catch {
+            // not JSON — skip
+          }
+        }
+      } catch (err) {
+        console.error("Failed to read session log:", err);
       }
-    } catch (err) {
-      console.error("Failed to read session log:", err);
+    }
+
+    if (finalBody) {
+      await gql(ACK_MUTATION, {
+        input: {
+          agentSessionId: sessionId,
+          content: { type: "response", body: finalBody },
+        },
+      }).catch((err) => console.error("Failed to post final activity:", err));
     }
 
     // Clean up session files
@@ -333,4 +397,6 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
   child.on("error", (err) => {
     console.error(`Failed to spawn Claude for ${issueIdentifier}:`, err);
   });
+
+  child.unref();
 }
