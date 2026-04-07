@@ -45,7 +45,7 @@ If no log file exists, report "No heartbeat history found."
 
 ### Step 5: Current Issues
 
-Call `mcp__claude_ai_Linear__list_issues` to fetch issues in the configured project (from `config.yaml` → `linear.project`), excluding terminal states. Filter and categorize by Linear state:
+Call `mcp__linear-agent__linear_list_issues` to fetch issues, scoping to the configured team (from `config.yaml` → `linear.team`) and optionally project (`linear.project`). To filter by team, first call `mcp__linear-agent__linear_list_teams` to resolve the team name to its ID, then pass `teamId` to `list_issues`. If `linear.project` is also set, pass `projectId` as well. Exclude terminal states. Filter and categorize by Linear state:
 
 **Since last heartbeat** (issues that changed since the last logged heartbeat timestamp):
 - `✓` Done issues (completed)
