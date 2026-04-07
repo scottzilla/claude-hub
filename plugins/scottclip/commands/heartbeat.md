@@ -3,4 +3,6 @@ description: Run a ScottClip heartbeat cycle (pick up issues, do work, report)
 argument-hint: "[--dry-run] [--persona NAME] [--issue ID]"
 ---
 
-Invoke the `scottclip:heartbeat` skill using the Skill tool with args: "$ARGUMENTS"
+Use the Skill tool to invoke skill: "scottclip:heartbeat", args: "$ARGUMENTS"
+
+Do not attempt to follow the skill instructions directly. You MUST call the Skill tool to load and execute the skill.

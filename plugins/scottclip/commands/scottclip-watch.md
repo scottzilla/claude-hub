@@ -3,4 +3,6 @@ description: Start ScottClip watch mode (consolidated server with webhook + MCP 
 argument-hint: "[--stop]"
 ---
 
-Invoke the `scottclip:watch` skill using the Skill tool with args: "$ARGUMENTS"
+Use the Skill tool to invoke skill: "scottclip:watch", args: "$ARGUMENTS"
+
+Do not attempt to follow the skill instructions directly. You MUST call the Skill tool to load and execute the skill.
