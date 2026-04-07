@@ -94,6 +94,7 @@ export function createWebhookRoute(): Hono {
           } catch {
             console.log(`No active session file for ${sessionId} (may have already finished)`);
           }
+          return response;
         }
 
         // Team filter — skip events for other teams
