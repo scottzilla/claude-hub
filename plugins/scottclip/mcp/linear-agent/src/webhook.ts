@@ -1,11 +1,23 @@
 import { Hono } from "hono";
 import { createHmac, randomUUID } from "node:crypto";
 import { writeFile, mkdir, readFile, unlink } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AGENT_DIR } from "./auth.js";
 import { ackSession, spawnClaudeSession } from "./spawn.js";
 
 const EVENTS_DIR = join(AGENT_DIR, "events");
+
+function getConfiguredTeamId(): string | null {
+  const agentCwd = process.env.AGENT_CWD || process.cwd();
+  try {
+    const raw = readFileSync(join(agentCwd, ".scottclip", "config.yaml"), "utf-8");
+    const match = raw.match(/^\s*team_id:\s*"?([^"\n]+)"?/m);
+    return match ? match[1].trim() : null;
+  } catch {
+    return null;
+  }
+}
 
 export function verifySignature(
   body: string,
@@ -66,8 +78,8 @@ export function createWebhookRoute(): Hono {
         const sessionId = sessionData.id as string;
 
         // Check team filter — only process issues for our configured team
+        const configuredTeamId = getConfiguredTeamId();
         const issueTeamId = sessionData.issue?.teamId || sessionData.issue?.team?.id;
-        const configuredTeamId = process.env.POLL_TEAM_ID;
         if (configuredTeamId && issueTeamId && issueTeamId !== configuredTeamId) {
           console.log(`Ignoring event for team ${issueTeamId} (configured: ${configuredTeamId})`);
           return response;

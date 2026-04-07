@@ -7,6 +7,7 @@ linear:
   user_name: "{{USER_NAME}}"         # Board user's display name (used in @-mentions)
   board_user: "{{BOARD_USER}}"       # Board member to @-mention for escalations (often same as user_name)
   team: "{{TEAM}}"                   # Default team for new issues/sub-issues
+  team_id: "{{TEAM_ID}}"             # Linear team ID (used for webhook filtering)
   project: null                      # Optional: scope inbox to a specific project
 
 # Linear Agent MCP configuration

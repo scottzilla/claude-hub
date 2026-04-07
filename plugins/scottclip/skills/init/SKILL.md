@@ -195,7 +195,7 @@ Call `linear_get_viewer`.
 1. Call `linear_list_teams` to fetch available teams.
 2. Call `linear_list_users` to identify workspace members.
 3. Ask the user to confirm:
-   - Which **team** to use (if multiple exist)
+   - Which **team** to use (if multiple exist) — note both the team `name` and `id` from the response
    - Their **display name** for @-mentions in comments (pre-filled from Linear)
    - Their **board user name** for escalation @-mentions (pre-fill with same value as display name)
 
@@ -240,6 +240,7 @@ For "custom", ask the user to name each persona and its Linear label.
    - Replace `{{BOARD_USER}}` with the board user name
    - Replace `{{LINEAR_CLIENT_ID}}` with the OAuth client ID
    - Replace `{{TEAM}}` with the selected team name
+   - Replace `{{TEAM_ID}}` with the selected team's `id` from the `linear_list_teams` response
    - Write to `.scottclip/`
 
 3. Update `config.yaml` personas section to match the selected preset — remove entries for personas that weren't scaffolded.
