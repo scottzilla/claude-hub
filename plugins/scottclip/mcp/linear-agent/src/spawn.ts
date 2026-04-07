@@ -326,10 +326,12 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
               );
             }
           } else if (block.type === "tool_use" && typeof block.name === "string") {
+            const input = block.input as Record<string, unknown> | undefined;
+            const param = input ? JSON.stringify(input).slice(0, 500) : "";
             gql(ACK_MUTATION, {
               input: {
                 agentSessionId: sessionId,
-                content: { type: "action", action: `Using tool: ${block.name}`, parameter: "" },
+                content: { type: "action", action: block.name as string, parameter: param },
                 ephemeral: true,
               },
             }).catch((err) => console.error("Failed to post tool activity:", err));
