@@ -64,9 +64,8 @@ export async function ackSession(sessionId: string, message = "Starting up..."):
   try {
     await gql(ACK_MUTATION, {
       input: {
-        sessionId,
-        type: "thought",
-        body: message,
+        agentSessionId: sessionId,
+        content: { body: message },
         ephemeral: true,
       },
     });
