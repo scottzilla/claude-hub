@@ -77,15 +77,7 @@ export function createWebhookRoute(): Hono {
 
         const sessionId = sessionData.id as string;
 
-        // Check team filter — only process issues for our configured team
-        const configuredTeamId = getConfiguredTeamId();
-        const issueTeamId = sessionData.issue?.teamId || sessionData.issue?.team?.id;
-        if (configuredTeamId && issueTeamId && issueTeamId !== configuredTeamId) {
-          console.log(`Ignoring event for team ${issueTeamId} (configured: ${configuredTeamId})`);
-          return response;
-        }
-
-        // Check for stop signal — comes as action "prompted" with agentActivity.signal "stop"
+        // Stop signal first — don't do any other work
         const signal = event.agentActivity?.signal;
         if (signal === "stop") {
           console.log(`Stop signal received for session ${sessionId}`);
@@ -102,7 +94,17 @@ export function createWebhookRoute(): Hono {
           } catch {
             console.log(`No active session file for ${sessionId} (may have already finished)`);
           }
-        } else if (event.action === "created" || event.action === "prompted") {
+        }
+
+        // Team filter — skip events for other teams
+        const configuredTeamId = getConfiguredTeamId();
+        const issueTeamId = sessionData.issue?.teamId || sessionData.issue?.team?.id;
+        if (configuredTeamId && issueTeamId && issueTeamId !== configuredTeamId) {
+          console.log(`Ignoring event for team ${issueTeamId} (configured: ${configuredTeamId})`);
+          return response;
+        }
+
+        if (event.action === "created" || event.action === "prompted") {
           // Ack FIRST (must respond within 5s), then fetch issue and spawn
           const ackMsg = event.action === "created" ? "Starting up..." : "Reading your message...";
           ackSession(sessionId, ackMsg).catch((err) =>
