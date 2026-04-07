@@ -223,14 +223,15 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
   console.log(`Spawning Claude for ${issueIdentifier} (session ${sessionId})`);
 
   // Log spawned session output for debugging
-  const { openSync } = await import("node:fs");
   const logDir = join(targetRepo, ".scottclip", "sessions");
   await mkdir(logDir, { recursive: true });
-  const logFile = openSync(join(logDir, `${sessionId}.log`), "w");
+  const logPath = join(logDir, `${sessionId}.log`);
 
-  const child = spawn(CLAUDE_BIN, cliArgs, {
+  // Use shell to redirect output to log file
+  const shellCmd = `${CLAUDE_BIN} ${cliArgs.map(a => `'${a.replace(/'/g, "'\\''")}'`).join(" ")} > "${logPath}" 2>&1`;
+  const child = spawn("sh", ["-c", shellCmd], {
     cwd: targetRepo,
-    stdio: ["ignore", logFile, logFile],
+    stdio: "ignore",
     detached: true,
     env: { ...process.env },
   });
