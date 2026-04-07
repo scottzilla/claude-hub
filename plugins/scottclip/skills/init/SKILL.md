@@ -81,6 +81,7 @@ This MUST succeed before proceeding — without it, the MCP server won't load af
 {
   "mcpServers": {
     "linear-agent": {
+      "type": "http",
       "url": "http://localhost:3847/mcp"
     }
   }
