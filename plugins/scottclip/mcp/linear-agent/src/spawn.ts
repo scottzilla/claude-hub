@@ -329,7 +329,7 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
             gql(ACK_MUTATION, {
               input: {
                 agentSessionId: sessionId,
-                content: { type: "action", action: `Using tool: ${block.name}` },
+                content: { type: "action", action: `Using tool: ${block.name}`, parameter: "" },
                 ephemeral: true,
               },
             }).catch((err) => console.error("Failed to post tool activity:", err));
