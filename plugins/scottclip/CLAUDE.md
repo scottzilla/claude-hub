@@ -75,7 +75,7 @@ The plugin bundles a Hono-based HTTP server that Claude Code connects to via HTT
 
 The server previously had a separate `webhook/receiver.ts` — that file was deleted when the architecture was consolidated into the single Hono server.
 
-**MCP transport:** HTTP (`WebStandardStreamableHTTPServerTransport`) at `/mcp`. The global `~/.claude/.mcp.json` uses a `url` key pointing to `http://localhost:3847/mcp` — not `command`/`args`. Credentials are stored in `.scottclip/.env`, not in `.mcp.json`.
+**MCP transport:** HTTP (`WebStandardStreamableHTTPServerTransport`) at `/mcp`. The project-level `.mcp.json` uses a `url` key pointing to `http://localhost:3847/mcp` — not `command`/`args`. Credentials are stored in `.scottclip/.env`, not in the MCP config. **Important:** Claude Code only reads MCP configs from project `.mcp.json`, `~/.claude.json`, or `~/.claude/settings.json` — NOT from `~/.claude/.mcp.json`.
 
 **npm scripts** (from `mcp/linear-agent/`): `start`, `stop`, `start:tunnel`, `test`, `test:watch`, `dev`, `build`.
 

@@ -6,12 +6,12 @@ version: 0.2.0
 
 # ScottClip Initialization
 
-Initialize ScottClip in the current repository. Creates `~/.claude/.mcp.json` (global MCP server config), authorizes with Linear via OAuth, and scaffolds `.scottclip/` with config, persona templates, and Linear labels.
+Initialize ScottClip in the current repository. Creates `.mcp.json` (project-level MCP server config), authorizes with Linear via OAuth, and scaffolds `.scottclip/` with config, persona templates, and Linear labels.
 
 ## Flow Overview
 
 ```
-Phase 1 (first run):  Collect credentials → Write ~/.claude/.mcp.json + .scottclip/.env → Start server → Browser auth → Restart
+Phase 1 (first run):  Collect credentials → Write .mcp.json + .scottclip/.env → Start server → Browser auth → Restart
 Phase 2 (after restart): Verify auth → Pick team → Choose personas → Create labels → Scaffold config → Done
 ```
 
@@ -23,15 +23,15 @@ Run these checks at the start to determine where to resume:
 
 1. **`.scottclip/config.yaml` exists AND `linear-agent` tools available** → this is a re-initialization. Skip to the "Re-initialization" section at the bottom.
 
-2. **`~/.claude/.mcp.json` has `linear-agent` entry AND tools are available** → Phase 1 is done. Jump to **Phase 2**.
+2. **`.mcp.json` has `linear-agent` entry AND tools are available** → Phase 1 is done. Jump to **Phase 2**.
 
-3. **`~/.claude/.mcp.json` has `linear-agent` entry BUT tools NOT available** → config was written but session hasn't restarted. First check if the server is running:
+3. **`.mcp.json` has `linear-agent` entry BUT tools NOT available** → config was written but session hasn't restarted. First check if the server is running:
    ```
    Run via Bash: curl -s http://localhost:3847/ 2>/dev/null
    ```
    - **Server responds** → report:
      ```
-     ~/.claude/.mcp.json is configured and the server is running on port 3847.
+     .mcp.json is configured and the server is running on port 3847.
      Restart Claude Code and re-run /scottclip-init to complete setup.
      ```
    - **Server not running** → offer to restart it:
@@ -42,7 +42,7 @@ Run these checks at the start to determine where to resume:
      ```
    Stop.
 
-4. **No `linear-agent` in `~/.claude/.mcp.json` (or no `~/.claude/.mcp.json`)** → Fresh start. Run **Phase 1**.
+4. **No `linear-agent` in `.mcp.json` (or no `.mcp.json`)** → Fresh start. Run **Phase 1**.
 
 ---
 
@@ -65,7 +65,7 @@ Ask the user for all values in a single prompt. Do NOT split across multiple int
 > - **Linear Client ID**
 > - **Linear Client Secret**
 
-### Step 2: Write `~/.claude/.mcp.json` and `.scottclip/.env`
+### Step 2: Write `.mcp.json` and `.scottclip/.env`
 
 Resolve the plugin root path (`${CLAUDE_PLUGIN_ROOT}`). The MCP server is bundled at `${CLAUDE_PLUGIN_ROOT}/mcp/linear-agent/`.
 
@@ -75,7 +75,7 @@ Run via Bash: cd <resolved_plugin_root>/mcp/linear-agent && npm install && npm r
 ```
 This MUST succeed before proceeding — without it, the MCP server won't load after restart.
 
-**Write global MCP config.** Read existing `~/.claude/.mcp.json` if present (merge, don't overwrite other MCP servers). Write or update the `linear-agent` entry using the `url` key (HTTP transport):
+**Write project-level MCP config.** Read existing `.mcp.json` in the current working directory if present (merge, don't overwrite other MCP servers). Write or update the `linear-agent` entry using the `url` key (HTTP transport):
 
 ```json
 {
@@ -87,6 +87,8 @@ This MUST succeed before proceeding — without it, the MCP server won't load af
   }
 }
 ```
+
+> **Important:** The config MUST be at `<project>/.mcp.json` (project scope), NOT `~/.claude/.mcp.json`. Claude Code only reads MCP configs from project-level `.mcp.json`, `~/.claude.json` (local scope), or `~/.claude/settings.json` (user scope). The path `~/.claude/.mcp.json` is NOT recognized.
 
 **Write `.scottclip/.env`.** Create the `.scottclip/` directory if needed. Write credentials to `.scottclip/.env` (the server loads this file automatically):
 
@@ -164,7 +166,7 @@ The MCP tools won't be available until after a restart. But we can still authori
 ### Step 4: Prompt Restart
 
 ```
-✓ ~/.claude/.mcp.json configured
+✓ .mcp.json configured (project-level)
 ✓ .scottclip/.env written
 ✓ Authorized with Linear
 ✓ Server running in background (PID <pid>) — persists after restart
@@ -180,7 +182,7 @@ Stop here. Phase 2 runs after restart.
 
 ## Phase 2: Set Up ScottClip
 
-> Phase 2 starts when: `.mcp.json` has `linear-agent` AND MCP tools are available.
+> Phase 2 starts when: project `.mcp.json` has `linear-agent` AND MCP tools are available.
 
 ### Step 1: Verify Authorization
 
@@ -292,7 +294,7 @@ Ask the user how they want to run ScottClip:
 ScottClip initialized!
 
 MCP:
-  ✓ linear-agent configured in ~/.claude/.mcp.json (url: http://localhost:3847/mcp)
+  ✓ linear-agent configured in .mcp.json (url: http://localhost:3847/mcp)
   ✓ Credentials in .scottclip/.env
   ✓ Authorized as <app name>
   ✓ AGENT_CWD: /current/path
@@ -325,7 +327,7 @@ Next steps:
 
 | Error | Response |
 |-------|----------|
-| MCP tools not available | Check `.mcp.json` state, guide through Phase 1 or prompt restart. |
+| MCP tools not available | Check project `.mcp.json` state, guide through Phase 1 or prompt restart. |
 | Authorization fails | Show auth URL for manual retry, check tunnel is running and callback URL matches. |
 | Server won't start | Check port 3847 conflict, verify `.scottclip/.env` credentials are set. |
 | No teams found | Stop. Ask user to verify Linear workspace access. |

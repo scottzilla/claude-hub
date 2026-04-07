@@ -30,20 +30,24 @@ const POLL_TEAM_ID = process.env.POLL_TEAM_ID || "";
 
 // --- MCP Server Setup ---
 
-const mcpServer = new McpServer({
-  name: "linear-agent",
-  version: "0.1.0",
-});
+function createMcpServer(): McpServer {
+  const server = new McpServer({
+    name: "linear-agent",
+    version: "0.1.0",
+  });
 
-registerIssueTools(mcpServer);
-registerRelationTools(mcpServer);
-registerCommentTools(mcpServer);
-registerLabelTools(mcpServer);
-registerTeamTools(mcpServer);
-registerDocumentTools(mcpServer);
-registerSessionTools(mcpServer);
-registerEventTools(mcpServer);
-registerStateTools(mcpServer);
+  registerIssueTools(server);
+  registerRelationTools(server);
+  registerCommentTools(server);
+  registerLabelTools(server);
+  registerTeamTools(server);
+  registerDocumentTools(server);
+  registerSessionTools(server);
+  registerEventTools(server);
+  registerStateTools(server);
+
+  return server;
+}
 
 // Track active transports by session ID
 const transports = new Map<string, WebStandardStreamableHTTPServerTransport>();
@@ -84,7 +88,7 @@ app.all("/mcp", async (c) => {
     },
   });
 
-  await mcpServer.connect(transport);
+  await createMcpServer().connect(transport);
   return transport.handleRequest(c.req.raw);
 });
 
