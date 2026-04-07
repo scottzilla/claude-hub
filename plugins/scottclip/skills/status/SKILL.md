@@ -1,5 +1,5 @@
 ---
-name: scottclip-status
+name: status
 description: This skill should be used when the user asks to "check scottclip status", "show agent status", "what is scottclip doing", "show heartbeat status", "what's in the queue", or runs the /scottclip-status command. Shows current ScottClip state, issue queue, and blocked items.
 version: 0.1.0
 ---

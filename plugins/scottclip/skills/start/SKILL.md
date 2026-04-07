@@ -1,5 +1,5 @@
 ---
-name: scottclip-start
+name: start
 description: This skill should be used when the user asks to "start the server", "start ScottClip", or runs the /scottclip-start command. Starts the consolidated ScottClip MCP server which handles webhooks, MCP tools, and OAuth in a single process.
 version: 0.3.0
 ---
