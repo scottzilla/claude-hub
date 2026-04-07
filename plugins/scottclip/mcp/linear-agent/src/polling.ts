@@ -33,7 +33,7 @@ export function deduplicateIssues(
 }
 
 const TODO_ISSUES_QUERY = `
-  query TodoIssues($teamId: String!) {
+  query TodoIssues($teamId: ID!) {
     issues(
       filter: {
         team: { id: { eq: $teamId } }
