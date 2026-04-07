@@ -35,16 +35,17 @@ Check quiet hours: if `quiet_hours.enabled` and current time is within the quiet
 ## Step 2: Check Inbox
 
 If `--issue <ID>` is set, skip Steps 2 and 3 entirely. Instead:
-1. Call `linear_get_issue` with the provided ID.
+1. Call `mcp__claude_ai_Linear__get_issue` with the provided ID.
 2. If the issue doesn't exist or is in a terminal state (Done, Canceled), exit: "Issue not found or already completed."
-3. Proceed directly to Step 4 with this single issue.
+3. If the issue is in Backlog or Triage state (state type `backlog`), move it to "Todo" via `mcp__claude_ai_Linear__save_issue` before continuing — the explicit `--issue` flag means the agent was asked to work on it regardless of queue state.
+4. Proceed directly to Step 4 with this single issue.
 
 Otherwise, perform the normal inbox scan:
 
-1. Call `mcp__claude_ai_Linear__list_issues` to fetch issues in the project, excluding Done, Canceled, and Duplicate states.
+1. Call `mcp__claude_ai_Linear__list_issues` to fetch issues in the project. Filter to state types `unstarted` (Todo) and `started` (In Progress) only — this excludes Backlog, Triage, Done, Canceled, and Duplicate states at the API level.
    - If `list_issues` fails (network error, Linear API outage): delete lockfile and exit with error: "Linear API unavailable. Will retry next heartbeat."
 2. Filter client-side:
-   - **Keep** only issues with status "In Progress" or "Todo"
+   - **Keep** only issues with state type `unstarted` (Todo) or `started` (In Progress) — skip any Backlog/Triage issues that slipped through
    - **Skip** issues that have an assignee (claimed by another agent or human) — except issues the orchestrator itself claimed in a previous heartbeat (assignee is "me" and status is "In Progress")
    - **Skip** issues without a persona label (unless Orchestrator is default and issue has no label)
    - **Skip** "Blocked" issues unless new human comments exist since the last agent comment (check via `mcp__claude_ai_Linear__list_comments`)
