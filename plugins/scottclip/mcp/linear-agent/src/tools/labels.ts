@@ -3,7 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { gql } from "../graphql.js";
 
 const LIST_LABELS_QUERY = `
-  query ListLabels($teamId: ID) {
+  query ListLabels($teamId: String) {
     issueLabels(filter: { team: { id: { eq: $teamId } } }, first: 100) {
       nodes {
         id

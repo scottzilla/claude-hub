@@ -32,7 +32,7 @@ const LIST_ISSUES_QUERY = `
 `;
 
 const GET_ISSUE_QUERY = `
-  query GetIssue($id: ID!) {
+  query GetIssue($id: String!) {
     issue(id: $id) {
       ${ISSUE_FIELDS}
       comments(first: 10, orderBy: createdAt) {
@@ -57,7 +57,7 @@ const CREATE_ISSUE_MUTATION = `
 `;
 
 const UPDATE_ISSUE_MUTATION = `
-  mutation UpdateIssue($id: ID!, $input: IssueUpdateInput!) {
+  mutation UpdateIssue($id: String!, $input: IssueUpdateInput!) {
     issueUpdate(id: $id, input: $input) {
       success
       issue { ${ISSUE_FIELDS} }

@@ -3,7 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { gql } from "../graphql.js";
 
 const CREATE_SESSION_MUTATION = `
-  mutation CreateSession($issueId: ID!) {
+  mutation CreateSession($issueId: String!) {
     agentSessionCreateOnIssue(issueId: $issueId) {
       success
       agentSession {
@@ -17,7 +17,7 @@ const CREATE_SESSION_MUTATION = `
 `;
 
 const UPDATE_SESSION_MUTATION = `
-  mutation UpdateSession($id: ID!, $input: AgentSessionUpdateInput!) {
+  mutation UpdateSession($id: String!, $input: AgentSessionUpdateInput!) {
     agentSessionUpdate(id: $id, input: $input) {
       success
       agentSession {

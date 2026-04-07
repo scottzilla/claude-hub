@@ -10,7 +10,7 @@ interface WorkflowState {
 const cache = new Map<string, WorkflowState[]>();
 
 const STATES_QUERY = `
-  query TeamStates($teamId: ID!) {
+  query TeamStates($teamId: String!) {
     team(id: $teamId) {
       states {
         nodes {

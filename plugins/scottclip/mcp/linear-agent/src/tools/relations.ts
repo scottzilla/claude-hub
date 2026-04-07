@@ -12,7 +12,7 @@ const ADD_RELATION_MUTATION = `
 `;
 
 const DELETE_RELATION_MUTATION = `
-  mutation DeleteRelation($id: ID!) {
+  mutation DeleteRelation($id: String!) {
     issueRelationDelete(id: $id) {
       success
     }
@@ -20,7 +20,7 @@ const DELETE_RELATION_MUTATION = `
 `;
 
 const LIST_RELATIONS_QUERY = `
-  query IssueRelations($id: ID!) {
+  query IssueRelations($id: String!) {
     issue(id: $id) {
       relations {
         nodes {
