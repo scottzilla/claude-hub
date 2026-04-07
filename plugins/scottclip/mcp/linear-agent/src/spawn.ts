@@ -218,29 +218,35 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
     fetchedIssue = await fetchIssue(issueId);
   }
 
-  const { cliArgs } = buildClaudeArgs(event, fetchedIssue);
+  const { prompt } = buildClaudeArgs(event, fetchedIssue);
 
   console.log(`Spawning Claude for ${issueIdentifier} (session ${sessionId})`);
 
-  // Log spawned session output for debugging
-  const logDir = join(targetRepo, ".scottclip", "sessions");
-  await mkdir(logDir, { recursive: true });
-  const logPath = join(logDir, `${sessionId}.log`);
+  // Write prompt to file (avoids shell escaping issues with multi-line prompts)
+  const sessionsDir = join(targetRepo, ".scottclip", "sessions");
+  await mkdir(sessionsDir, { recursive: true });
+  const promptPath = join(sessionsDir, `${sessionId}.prompt`);
+  const logPath = join(sessionsDir, `${sessionId}.log`);
+  await writeFile(promptPath, prompt);
 
-  // Use shell to redirect output to log file
-  const shellCmd = `${CLAUDE_BIN} ${cliArgs.map(a => `'${a.replace(/'/g, "'\\''")}'`).join(" ")} > "${logPath}" 2>&1`;
-  const child = spawn("sh", ["-c", shellCmd], {
+  // Pipe prompt file to claude via stdin, log output
+  const { openSync } = await import("node:fs");
+  const logFd = openSync(logPath, "w");
+  const promptFd = openSync(promptPath, "r");
+
+  const child = spawn(CLAUDE_BIN, [
+    "-p",
+    "--allowedTools", "mcp__linear-agent*,Read,Write,Edit,Bash,Grep,Glob,Agent",
+  ], {
     cwd: targetRepo,
-    stdio: "ignore",
+    stdio: [promptFd, logFd, logFd],
     detached: true,
     env: { ...process.env },
   });
 
   child.unref();
 
-  // Write session file so stop handler can kill the process
-  const sessionsDir = join(targetRepo, ".scottclip", "sessions");
-  await mkdir(sessionsDir, { recursive: true });
+  // Write session PID file so stop handler can kill the process
   const sessionFile = join(sessionsDir, `${sessionId}.pid`);
   await writeFile(sessionFile, String(child.pid));
   console.log(`Session file written: ${sessionFile} (PID ${child.pid})`);
