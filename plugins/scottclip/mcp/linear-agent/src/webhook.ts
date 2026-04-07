@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { createHmac, randomUUID } from "node:crypto";
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { AGENT_DIR } from "./auth.js";
 import { ackSession, spawnClaudeSession } from "./spawn.js";
@@ -81,10 +81,22 @@ export function createWebhookRoute(): Hono {
           );
           spawnClaudeSession(event).catch((err) => console.error("Spawn error:", err));
         } else if (event.action === "stopped") {
-          // User requested stop — acknowledge and don't spawn
+          // User requested stop — kill the spawned Claude process if still running
           console.log(`Stop signal received for session ${sessionId}`);
-          // TODO: kill any running Claude process for this session
-          // For now, just log it — spawned sessions are detached processes
+          const agentCwd = process.env.AGENT_CWD || process.cwd();
+          const sessionsDir = join(agentCwd, ".scottclip", "sessions");
+          const sessionFile = join(sessionsDir, `${sessionId}.json`);
+          try {
+            const raw = await readFile(sessionFile, "utf-8");
+            const sessionInfo = JSON.parse(raw) as { pid?: number };
+            if (sessionInfo.pid) {
+              process.kill(sessionInfo.pid, "SIGTERM");
+              console.log(`Killed session ${sessionId} (PID ${sessionInfo.pid})`);
+            }
+            await unlink(sessionFile);
+          } catch {
+            console.log(`No active session file for ${sessionId} (may have already finished)`);
+          }
         }
       }
 

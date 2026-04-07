@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { writeFile, mkdir, unlink } from "node:fs/promises";
+import { join } from "node:path";
 import { gql } from "./graphql.js";
 
 const CLAUDE_BIN = process.env.CLAUDE_BIN || "claude";
@@ -228,6 +230,27 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
   });
 
   child.unref();
+
+  // Write session file so stop handler can kill the process
+  const sessionsDir = join(targetRepo, ".scottclip", "sessions");
+  await mkdir(sessionsDir, { recursive: true });
+  const sessionFile = join(sessionsDir, `${sessionId}.json`);
+  await writeFile(sessionFile, JSON.stringify({
+    pid: child.pid,
+    issueIdentifier,
+    sessionId,
+    spawnedAt: new Date().toISOString(),
+  }, null, 2));
+  console.log(`Session file written: ${sessionFile} (PID ${child.pid})`);
+
+  child.on("exit", async () => {
+    try {
+      await unlink(sessionFile);
+      console.log(`Session ${sessionId} exited, cleaned up ${sessionFile}`);
+    } catch {
+      // File may already be removed by stop handler
+    }
+  });
 
   child.on("error", (err) => {
     console.error(`Failed to spawn Claude for ${issueIdentifier}:`, err);
