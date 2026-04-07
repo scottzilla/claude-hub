@@ -91,7 +91,7 @@ describe("buildClaudeArgs", () => {
 
     const result = buildClaudeArgs(event);
 
-    expect(result.prompt).toContain("Previous Comments");
+    expect(result.prompt).toContain("Recent Comments");
     expect(result.prompt).toContain("**Alice:** first comment");
     expect(result.prompt).toContain("**Bob:** second comment");
     expect(result.prompt).toContain("Workspace Guidance");

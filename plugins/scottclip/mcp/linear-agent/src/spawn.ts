@@ -11,25 +11,82 @@ const ACK_MUTATION = `
   }
 `;
 
+const GET_ISSUE_QUERY = `
+  query GetIssue($id: String!) {
+    issue(id: $id) {
+      id
+      identifier
+      title
+      description
+      url
+      priority
+      priorityLabel
+      state { id name type }
+      assignee { id name }
+      labels { nodes { id name } }
+      parent { id identifier title }
+      comments(first: 10, orderBy: createdAt) {
+        nodes {
+          id
+          body
+          user { id name }
+          createdAt
+        }
+      }
+    }
+  }
+`;
+
 export interface ClaudeArgs {
   prompt: string;
   cliArgs: string[];
 }
 
-export function buildClaudeArgs(event: Record<string, unknown>): ClaudeArgs {
+interface IssueData {
+  id: string;
+  identifier: string;
+  title: string;
+  description?: string;
+  url?: string;
+  priority?: number;
+  priorityLabel?: string;
+  state?: { id: string; name: string; type: string };
+  assignee?: { id: string; name: string };
+  labels?: { nodes: Array<{ id: string; name: string }> };
+  parent?: { id: string; identifier: string; title: string };
+  comments?: { nodes: Array<{ id: string; body: string; user: { id: string; name: string }; createdAt: string }> };
+}
+
+async function fetchIssue(issueId: string): Promise<IssueData | null> {
+  try {
+    const data = await gql<{ issue: IssueData }>(GET_ISSUE_QUERY, { id: issueId });
+    return data.issue;
+  } catch (err) {
+    console.error(`Failed to fetch issue ${issueId}:`, err);
+    return null;
+  }
+}
+
+export function buildClaudeArgs(
+  event: Record<string, unknown>,
+  fetchedIssue?: IssueData | null,
+): ClaudeArgs {
   // Linear webhook uses event.agentSession, synthetic events may use event.data
   const session = (event.agentSession || event.data) as Record<string, unknown> | undefined;
-  const issue = session?.issue as Record<string, unknown> | undefined;
+  const webhookIssue = session?.issue as Record<string, unknown> | undefined;
   const comment = session?.comment as Record<string, unknown> | undefined;
   const creator = session?.creator as Record<string, unknown> | undefined;
   const previousComments = event.previousComments as Array<Record<string, unknown>> | undefined;
   const guidance = event.guidance as string | undefined;
   const promptContext = event.promptContext as string | undefined;
 
-  const issueIdentifier = (issue?.identifier || session?.issueIdentifier || session?.issueId || "unknown") as string;
-  const issueTitle = (issue?.title || "unknown") as string;
-  const issueDescription = issue?.description as string | undefined;
-  const issueUrl = (issue?.url || session?.url || "") as string;
+  // Prefer fetched issue (has labels, full details) over webhook snippet
+  const issueIdentifier = fetchedIssue?.identifier || (webhookIssue?.identifier as string) || (session?.issueIdentifier as string) || "unknown";
+  const issueTitle = fetchedIssue?.title || (webhookIssue?.title as string) || "unknown";
+  const issueDescription = fetchedIssue?.description || (webhookIssue?.description as string) || undefined;
+  const issueUrl = fetchedIssue?.url || (webhookIssue?.url as string) || (session?.url as string) || "";
+  const issueState = fetchedIssue?.state?.name || "unknown";
+  const issueLabels = fetchedIssue?.labels?.nodes?.map((l) => l.name) || [];
   const sessionId = (session?.id || "unknown") as string;
   const action = (event.action as string) || "unknown";
   const userMessage = comment?.body as string | undefined;
@@ -42,7 +99,12 @@ export function buildClaudeArgs(event: Record<string, unknown>): ClaudeArgs {
     `- Session ID: ${sessionId}`,
     `- Action: ${action}`,
     `- Issue: ${issueIdentifier} — ${issueTitle}`,
+    `- State: ${issueState}`,
   ];
+
+  if (issueLabels.length > 0) {
+    lines.push(`- Labels: ${issueLabels.join(", ")}`);
+  }
 
   if (issueUrl) {
     lines.push(`- URL: ${issueUrl}`);
@@ -56,9 +118,14 @@ export function buildClaudeArgs(event: Record<string, unknown>): ClaudeArgs {
     lines.push(``, `## Message from ${userName}`, userMessage);
   }
 
-  if (previousComments && previousComments.length > 0) {
-    lines.push(``, `## Previous Comments`);
-    for (const c of previousComments) {
+  // Use fetched comments if we have them and no previousComments from webhook
+  const commentsToShow = previousComments && previousComments.length > 0
+    ? previousComments
+    : fetchedIssue?.comments?.nodes?.map((c) => ({ body: c.body, user: { name: c.user.name } })) || [];
+
+  if (commentsToShow.length > 0) {
+    lines.push(``, `## Recent Comments`);
+    for (const c of commentsToShow) {
       const author = (c.user as Record<string, unknown>)?.name || "unknown";
       lines.push(`**${author}:** ${c.body}`);
     }
@@ -76,15 +143,12 @@ export function buildClaudeArgs(event: Record<string, unknown>): ClaudeArgs {
     ``,
     `## Persona Resolution`,
     ``,
-    `1. Fetch the issue labels: call linear_get_issue for ${issueIdentifier}`,
-    `2. Read .scottclip/config.yaml to get the personas map (label → persona directory)`,
-    `3. Match: if the issue has a label that maps to a persona, spawn a persona-worker Agent:`,
-    `   - Set AGENT_HOME to the persona directory (e.g., .scottclip/personas/backend)`,
-    `   - Pass all session context (session ID, issue, user message, etc.)`,
+    `1. Read .scottclip/config.yaml to get the personas map (label → persona directory)`,
+    `2. Match issue labels [${issueLabels.join(", ")}] to a persona`,
+    `3. If a persona matches: spawn a persona-worker Agent with AGENT_HOME set to the persona directory`,
     `   - The persona-worker reads SOUL.md for identity, TOOLS.md for tool constraints`,
-    `4. No match: if the issue has no persona label, act as the orchestrator:`,
-    `   - Triage the issue, apply the appropriate persona label`,
-    `   - Then spawn the persona-worker for the newly assigned persona`,
+    `   - Pass all session context (session ID, issue, user message) to the worker`,
+    `4. If no persona label: act as the orchestrator — triage, apply label, then spawn worker`,
     ``,
     `## Session Reporting`,
     ``,
@@ -128,11 +192,20 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
     return;
   }
 
-  const data = event.data as Record<string, unknown> | undefined;
-  const issueIdentifier = (data?.issueIdentifier || data?.issueId || "unknown") as string;
-  const sessionId = (data?.id || "unknown") as string;
+  const session = (event.agentSession || event.data) as Record<string, unknown> | undefined;
+  const webhookIssue = session?.issue as Record<string, unknown> | undefined;
+  const issueId = (webhookIssue?.id || session?.issueId || "") as string;
+  const issueIdentifier = (webhookIssue?.identifier || session?.issueIdentifier || "unknown") as string;
+  const sessionId = (session?.id || "unknown") as string;
 
-  const { cliArgs } = buildClaudeArgs(event);
+  // Fetch full issue with labels before spawning (saves LLM tokens)
+  let fetchedIssue: IssueData | null = null;
+  if (issueId) {
+    console.log(`Fetching issue ${issueIdentifier} (${issueId}) before spawn...`);
+    fetchedIssue = await fetchIssue(issueId);
+  }
+
+  const { cliArgs } = buildClaudeArgs(event, fetchedIssue);
 
   console.log(`Spawning Claude for ${issueIdentifier} (session ${sessionId})`);
 
