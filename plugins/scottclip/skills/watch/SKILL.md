@@ -39,11 +39,11 @@ Parse `$ARGUMENTS` for flags:
    ```
    This ensures the latest code is compiled. Must succeed before starting.
 
-3. Start the server as a background daemon from the **target repo directory** (so `.scottclip/.env` is found):
+3. Start the server as a background process (visible in Claude Code status line):
    ```
-   Run via Bash: cd <AGENT_CWD> && AGENT_CWD=<AGENT_CWD> nohup node <PLUGIN_ROOT>/mcp/linear-agent/dist/server.js > .scottclip/server.log 2>&1 & echo $!
+   Run via Bash (background): cd <AGENT_CWD> && AGENT_CWD=<AGENT_CWD> node <PLUGIN_ROOT>/mcp/linear-agent/dist/server.js 2>&1 | tee .scottclip/server.log
    ```
-   Save the printed PID.
+   Use `run_in_background: true` on the Bash tool call so it appears as an active task in the status line.
 
    `<PLUGIN_ROOT>` is `${CLAUDE_PLUGIN_ROOT}`. `<AGENT_CWD>` is from `.scottclip/.env` or the current working directory. The server loads `.scottclip/.env` automatically for credentials.
 
