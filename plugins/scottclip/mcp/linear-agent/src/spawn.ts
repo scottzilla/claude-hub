@@ -236,6 +236,7 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
 
   const child = spawn(CLAUDE_BIN, [
     "-p",
+    "--permission-mode", "bypassPermissions",
     "--allowedTools", "mcp__linear-agent*,Read,Write,Edit,Bash,Grep,Glob,Agent",
   ], {
     cwd: targetRepo,
