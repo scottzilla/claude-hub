@@ -21,7 +21,7 @@ const SEARCH_DOCS_QUERY = `
 `;
 
 const GET_DOCUMENT_QUERY = `
-  query GetDocument($id: String!) {
+  query GetDocument($id: ID!) {
     document(id: $id) {
       id
       title
@@ -34,7 +34,7 @@ const GET_DOCUMENT_QUERY = `
 `;
 
 const GET_ATTACHMENTS_QUERY = `
-  query GetAttachments($issueId: String!) {
+  query GetAttachments($issueId: ID!) {
     issue(id: $issueId) {
       attachments {
         nodes {
@@ -60,7 +60,7 @@ const CREATE_DOCUMENT_MUTATION = `
 `;
 
 const UPDATE_DOCUMENT_MUTATION = `
-  mutation UpdateDocument($id: String!, $input: DocumentUpdateInput!) {
+  mutation UpdateDocument($id: ID!, $input: DocumentUpdateInput!) {
     documentUpdate(id: $id, input: $input) {
       success
       document { id title updatedAt }

@@ -15,7 +15,7 @@ const ACK_MUTATION = `
 `;
 
 const GET_ISSUE_QUERY = `
-  query GetIssue($id: String!) {
+  query GetIssue($id: ID!) {
     issue(id: $id) {
       id
       identifier

@@ -25,7 +25,7 @@ const VIEWER_QUERY = `
 `;
 
 const GET_USER_QUERY = `
-  query GetUser($id: String!) {
+  query GetUser($id: ID!) {
     user(id: $id) { id name email active displayName }
   }
 `;

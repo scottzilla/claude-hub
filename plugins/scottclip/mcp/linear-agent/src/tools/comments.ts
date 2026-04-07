@@ -3,7 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { gql } from "../graphql.js";
 
 const LIST_COMMENTS_QUERY = `
-  query ListComments($issueId: String!, $first: Int, $after: String) {
+  query ListComments($issueId: ID!, $first: Int, $after: String) {
     issue(id: $issueId) {
       comments(first: $first, after: $after, orderBy: createdAt) {
         nodes {
@@ -33,7 +33,7 @@ const CREATE_COMMENT_MUTATION = `
 `;
 
 const DELETE_COMMENT_MUTATION = `
-  mutation DeleteComment($id: String!) {
+  mutation DeleteComment($id: ID!) {
     commentDelete(id: $id) {
       success
     }
