@@ -66,11 +66,16 @@ export function registerSessionTools(server: McpServer) {
       description: "Update an agent session: status, external URLs, or plan checklist. Plan replaces the entire checklist.",
       inputSchema: {
         sessionId: z.string().describe("Session ID"),
-        status: z.enum(["active", "complete", "error", "stale"]).optional().describe("New session status"),
+        status: z.enum(["active", "complete", "error", "awaitingInput", "stale"]).optional().describe("New session status"),
         externalUrls: z.array(z.object({
           label: z.string(),
           url: z.string(),
-        })).optional().describe("External URLs (e.g. PR links) to display on the session"),
+        })).optional().describe("External URLs — replaces the entire array"),
+        addedExternalUrls: z.array(z.object({
+          label: z.string(),
+          url: z.string(),
+        })).optional().describe("External URLs to add (merged with existing)"),
+        removedExternalUrls: z.array(z.string()).optional().describe("External URL IDs or URLs to remove"),
         plan: z.array(z.object({
           content: z.string().describe("Step description"),
           status: z.enum(["pending", "inProgress", "completed", "canceled"]).describe("Step status"),
@@ -81,6 +86,8 @@ export function registerSessionTools(server: McpServer) {
       const input: Record<string, unknown> = {};
       if (args.status) input.status = args.status;
       if (args.externalUrls) input.externalUrls = args.externalUrls;
+      if (args.addedExternalUrls) input.addedExternalUrls = args.addedExternalUrls;
+      if (args.removedExternalUrls) input.removedExternalUrls = args.removedExternalUrls;
       if (args.plan) input.plan = args.plan;
 
       const data = await gql<{
@@ -94,17 +101,31 @@ export function registerSessionTools(server: McpServer) {
   server.registerTool(
     "linear_create_activity",
     {
-      description: "Emit an activity within an agent session. Markdown supported in body. Set ephemeral to true if the activity should be replaced by the next one.",
+      description: "Emit an activity within an agent session. Type determines shape: thought/elicitation/response/error use body; action uses action/parameter/result. Set ephemeral for thought or action types only.",
       inputSchema: {
         agentSessionId: z.string().describe("Agent session ID"),
-        body: z.string().describe("Activity content (markdown supported)"),
-        ephemeral: z.boolean().optional().default(false).describe("If true, activity is replaced by the next one"),
+        type: z.enum(["thought", "action", "elicitation", "response", "error"]).describe("Activity type"),
+        body: z.string().optional().describe("Content body (for thought, elicitation, response, error types)"),
+        action: z.string().optional().describe("Action name (for action type)"),
+        parameter: z.string().optional().describe("Action parameter (for action type)"),
+        result: z.string().optional().describe("Action result (for action type)"),
+        ephemeral: z.boolean().optional().describe("If true, activity is replaced by the next one (thought and action types only)"),
       },
     },
     async (args) => {
+      const content: Record<string, unknown> = { type: args.type };
+
+      if (args.type === "action") {
+        if (args.action) content.action = args.action;
+        if (args.parameter) content.parameter = args.parameter;
+        if (args.result) content.result = args.result;
+      } else {
+        if (args.body) content.body = args.body;
+      }
+
       const input: Record<string, unknown> = {
         agentSessionId: args.agentSessionId,
-        content: { body: args.body },
+        content,
       };
       if (args.ephemeral) input.ephemeral = true;
 
