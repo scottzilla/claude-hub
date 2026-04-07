@@ -222,9 +222,15 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
 
   console.log(`Spawning Claude for ${issueIdentifier} (session ${sessionId})`);
 
+  // Log spawned session output for debugging
+  const { openSync } = await import("node:fs");
+  const logDir = join(targetRepo, ".scottclip", "sessions");
+  await mkdir(logDir, { recursive: true });
+  const logFile = openSync(join(logDir, `${sessionId}.log`), "w");
+
   const child = spawn(CLAUDE_BIN, cliArgs, {
     cwd: targetRepo,
-    stdio: "ignore",
+    stdio: ["ignore", logFile, logFile],
     detached: true,
     env: { ...process.env },
   });
