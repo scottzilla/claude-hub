@@ -184,6 +184,25 @@ export function buildClaudeArgs(
   return { prompt, cliArgs };
 }
 
+const UPDATE_ISSUE_MUTATION = `
+  mutation UpdateIssue($id: String!, $input: IssueUpdateInput!) {
+    issueUpdate(id: $id, input: $input) {
+      success
+    }
+  }
+`;
+
+export async function moveIssueToState(issueId: string, teamId: string, stateName: string): Promise<void> {
+  try {
+    const { resolveStateName } = await import("./state-cache.js");
+    const stateId = await resolveStateName(teamId, stateName);
+    await gql(UPDATE_ISSUE_MUTATION, { id: issueId, input: { stateId } });
+    console.log(`Moved issue ${issueId} to "${stateName}"`);
+  } catch (err) {
+    console.error(`Failed to move issue to "${stateName}":`, err);
+  }
+}
+
 export async function ackSession(sessionId: string, message = "Starting up..."): Promise<void> {
   try {
     await gql(ACK_MUTATION, {

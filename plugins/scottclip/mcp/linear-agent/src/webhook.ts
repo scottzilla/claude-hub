@@ -4,7 +4,7 @@ import { writeFile, mkdir, readFile, unlink } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AGENT_DIR } from "./auth.js";
-import { ackSession, spawnClaudeSession } from "./spawn.js";
+import { ackSession, spawnClaudeSession, moveIssueToState } from "./spawn.js";
 
 const EVENTS_DIR = join(AGENT_DIR, "events");
 
@@ -106,11 +106,21 @@ export function createWebhookRoute(): Hono {
         }
 
         if (event.action === "created" || event.action === "prompted") {
-          // Ack FIRST (must respond within 5s), then fetch issue and spawn
+          // Ack FIRST (must respond within 5s), then move to In Progress, then spawn
           const ackMsg = event.action === "created" ? "Starting up..." : "Reading your message...";
           ackSession(sessionId, ackMsg).catch((err) =>
             console.error("Ack error:", err)
           );
+
+          // Move issue to In Progress
+          const issueId = sessionData.issue?.id;
+          const teamId = issueTeamId || configuredTeamId;
+          if (issueId && teamId) {
+            moveIssueToState(issueId as string, teamId as string, "In Progress").catch((err) =>
+              console.error("Move to In Progress error:", err)
+            );
+          }
+
           spawnClaudeSession(event).catch((err) => console.error("Spawn error:", err));
         }
       }
