@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { writeFile, mkdir, unlink } from "node:fs/promises";
+import { openSync } from "node:fs";
 import { join } from "node:path";
 import { gql } from "./graphql.js";
 
@@ -230,7 +231,6 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
   await writeFile(promptPath, prompt);
 
   // Pipe prompt file to claude via stdin, log output
-  const { openSync } = await import("node:fs");
   const logFd = openSync(logPath, "w");
   const promptFd = openSync(promptPath, "r");
 
