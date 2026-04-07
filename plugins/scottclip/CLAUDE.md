@@ -55,7 +55,7 @@ Routing: Linear issue label → `personas` map in config.yaml → persona direct
 | Type | Location | Auto-discovery |
 |------|----------|---------------|
 | Manifest | `.claude-plugin/plugin.json` | Required |
-| Commands | `commands/*.md` | By filename |
+| Commands | `commands/*.md` | By filename — key commands: `/scottclip-start` (server only), `/scottclip-watch` (server + heartbeat loop) |
 | Skills | `skills/*/SKILL.md` | By SKILL.md presence |
 | Agents | `agents/*.md` | By filename |
 | Hooks | `hooks/hooks.json` | By convention |

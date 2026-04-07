@@ -1,10 +1,10 @@
 ---
-name: scottclip-watch
-description: This skill should be used when the user asks to "start watching", "watch for issues", "start the agent loop", "enable auto-heartbeat", "run in background", or runs the /scottclip-watch command. Starts the consolidated ScottClip server which handles webhooks, MCP tools, and OAuth in a single process.
+name: scottclip-start
+description: This skill should be used when the user asks to "start the server", "start ScottClip", or runs the /scottclip-start command. Starts the consolidated ScottClip MCP server which handles webhooks, MCP tools, and OAuth in a single process.
 version: 0.3.0
 ---
 
-# ScottClip Watch
+# ScottClip Start
 
 Start the consolidated ScottClip server: a single Hono HTTP process on port 3847 that handles webhook events, MCP tools (`/mcp`), and OAuth callbacks (`/oauth/callback`).
 
@@ -70,11 +70,11 @@ Parse `$ARGUMENTS` for flags:
 
 ## Step 4: Report Status
 
-Display the watch configuration:
+Display the server configuration:
 
 ```
-ScottClip Watch Active
-──────────────────────
+ScottClip Server Active
+───────────────────────
 Server:   ✓ Running on port 3847
   MCP:    http://localhost:3847/mcp
   Webhook: http://localhost:3847/webhook
@@ -83,7 +83,7 @@ Tunnel:   ⚠ Run 'npm run start:tunnel' to expose (from mcp/linear-agent/)
 
 Events flow:
   Real-time: Linear → webhook → ack session → spawn Claude
-  On-demand: Run /heartbeat manually, or set up a cron job for periodic issue checking
+  On-demand: Run /heartbeat manually, or use /scottclip-watch for an automatic heartbeat loop
 ```
 
 ## Error Handling
@@ -98,7 +98,7 @@ Events flow:
 ## Notes
 
 - The server runs as a background process independent of the Claude Code session. It survives session restarts but not machine reboots.
-- For periodic issue checking, run `/heartbeat` manually or configure a cron job (e.g., `*/15 * * * * claude /heartbeat`). No built-in polling timer is included in the server.
+- For periodic issue checking, run `/heartbeat` manually or use `/scottclip-watch` to start the server with an automatic heartbeat loop.
 - The server reads credentials from `.scottclip/.env` in `AGENT_CWD` (set at init time).
 - The heartbeat lockfile (`.scottclip/.heartbeat-lock`) prevents concurrent heartbeats even if multiple webhook-spawned sessions attempt to run simultaneously.
 - For persistent scheduling that survives machine restarts, suggest using a process manager (e.g., `launchd`, `systemd`, `pm2`) to keep the server running.

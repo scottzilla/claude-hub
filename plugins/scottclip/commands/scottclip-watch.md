@@ -1,8 +1,13 @@
 ---
-description: Start ScottClip watch mode (consolidated server with webhook + MCP + OAuth)
+description: Start ScottClip watch mode (MCP server + recurring heartbeat loop)
 argument-hint: "[--stop]"
 ---
 
-Use the Skill tool to invoke skill: "scottclip:watch", args: "$ARGUMENTS"
+Start the MCP server and a recurring heartbeat loop.
 
-Do not attempt to follow the skill instructions directly. You MUST call the Skill tool to load and execute the skill.
+1. First, use the Skill tool to invoke skill: "scottclip:scottclip-start", args: "$ARGUMENTS"
+   - If `--stop` was passed, stop here after the skill completes.
+
+2. After the server is running, start a recurring heartbeat loop:
+   Run the built-in /loop command: `/loop 15m /heartbeat`
+   This runs /heartbeat every 15 minutes in the current session.
