@@ -59,8 +59,9 @@ export function createWebhookRoute(): Hono {
       // Respond 200 immediately, then handle async work
       const response = c.text("OK", 200);
 
-      if (event.type === "AgentSessionEvent" && event.data?.id) {
-        const sessionId = event.data.id as string;
+      const sessionData = event.data || event.agentSession;
+      if (event.type === "AgentSessionEvent" && sessionData?.id) {
+        const sessionId = sessionData.id as string;
 
         if (event.action === "created") {
           ackSession(sessionId, "Starting up...").catch((err) =>

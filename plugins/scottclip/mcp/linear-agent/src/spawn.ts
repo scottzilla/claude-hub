@@ -17,15 +17,18 @@ export interface ClaudeArgs {
 }
 
 export function buildClaudeArgs(event: Record<string, unknown>): ClaudeArgs {
-  const data = event.data as Record<string, unknown> | undefined;
-  const issueIdentifier = (data?.issueIdentifier || data?.issueId || "unknown") as string;
-  const sessionId = (data?.id || "unknown") as string;
+  // Linear webhook uses event.agentSession, synthetic events may use event.data
+  const session = (event.agentSession || event.data) as Record<string, unknown> | undefined;
+  const issue = session?.issue as Record<string, unknown> | undefined;
+  const comment = session?.comment as Record<string, unknown> | undefined;
+
+  const issueIdentifier = (issue?.identifier || session?.issueIdentifier || session?.issueId || "unknown") as string;
+  const sessionId = (session?.id || "unknown") as string;
   const eventType = (event.type as string) || "unknown";
   const action = (event.action as string) || "unknown";
 
-  const activity = data?.agentActivity as Record<string, unknown> | undefined;
-  const promptBody = activity?.body as string | undefined;
-  const promptContext = data?.promptContext as string | undefined;
+  const promptBody = comment?.body as string | undefined;
+  const promptContext = session?.promptContext as string | undefined;
 
   const lines = [
     `Linear agent event: ${eventType} (${action})`,

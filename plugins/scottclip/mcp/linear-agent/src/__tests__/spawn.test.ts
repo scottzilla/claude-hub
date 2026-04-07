@@ -2,28 +2,29 @@ import { describe, it, expect } from "vitest";
 import { buildClaudeArgs } from "../spawn.js";
 
 describe("buildClaudeArgs", () => {
-  it("builds correct CLI args for a created session event", () => {
+  it("builds correct CLI args for a real Linear webhook event", () => {
     const event = {
       type: "AgentSessionEvent",
-      action: "created",
-      data: {
+      action: "prompted",
+      agentSession: {
         id: "session-123",
-        issueIdentifier: "SC-42",
-        agentActivity: {
+        issue: {
+          id: "issue-abc",
+          identifier: "SC-42",
+          title: "Fix login bug",
+        },
+        comment: {
           body: "Fix the login bug",
         },
-        promptContext: "The login page throws a 500 error",
       },
     };
 
     const result = buildClaudeArgs(event);
 
-    expect(result.prompt).toContain("Linear agent event: AgentSessionEvent (created)");
+    expect(result.prompt).toContain("Linear agent event: AgentSessionEvent (prompted)");
     expect(result.prompt).toContain("Session: session-123");
     expect(result.prompt).toContain("Issue: SC-42");
     expect(result.prompt).toContain("User message: Fix the login bug");
-    expect(result.prompt).toContain("Context:");
-    expect(result.prompt).toContain("The login page throws a 500 error");
     expect(result.prompt).toContain("/heartbeat --issue SC-42");
     expect(result.cliArgs).toContain("-p");
     expect(result.cliArgs).toContain("--allowedTools");
@@ -33,7 +34,7 @@ describe("buildClaudeArgs", () => {
     const event = {
       type: "AgentSessionEvent",
       action: "created",
-      data: {
+      agentSession: {
         id: "session-456",
       },
     };
@@ -45,18 +46,19 @@ describe("buildClaudeArgs", () => {
     expect(result.prompt).not.toContain("Context:");
   });
 
-  it("uses issueId as fallback when issueIdentifier is absent", () => {
+  it("falls back to event.data for synthetic events", () => {
     const event = {
-      type: "AgentSessionEvent",
-      action: "prompted",
+      type: "PollEvent",
+      action: "discovered",
       data: {
-        id: "session-789",
+        id: "poll-789",
+        issueIdentifier: "SC-99",
         issueId: "abc-def",
       },
     };
 
     const result = buildClaudeArgs(event);
 
-    expect(result.prompt).toContain("Issue: abc-def");
+    expect(result.prompt).toContain("Issue: SC-99");
   });
 });
