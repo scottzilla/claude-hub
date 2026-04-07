@@ -94,19 +94,17 @@ export function registerSessionTools(server: McpServer) {
   server.registerTool(
     "linear_create_activity",
     {
-      description: "Emit an activity within an agent session. Types: thought (internal reasoning), action (tool use), elicitation (ask user), response (final result), error. Markdown supported.",
+      description: "Emit an activity within an agent session. Markdown supported in body. Set ephemeral to true if the activity should be replaced by the next one.",
       inputSchema: {
-        sessionId: z.string().describe("Session ID"),
-        type: z.enum(["thought", "action", "elicitation", "response", "error"]).describe("Activity type"),
+        agentSessionId: z.string().describe("Agent session ID"),
         body: z.string().describe("Activity content (markdown supported)"),
-        ephemeral: z.boolean().optional().default(false).describe("If true, activity is replaced by the next one of the same type"),
+        ephemeral: z.boolean().optional().default(false).describe("If true, activity is replaced by the next one"),
       },
     },
     async (args) => {
       const input: Record<string, unknown> = {
-        sessionId: args.sessionId,
-        type: args.type,
-        body: args.body,
+        agentSessionId: args.agentSessionId,
+        content: { body: args.body },
       };
       if (args.ephemeral) input.ephemeral = true;
 
