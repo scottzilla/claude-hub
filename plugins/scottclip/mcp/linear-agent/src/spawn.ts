@@ -54,7 +54,7 @@ export function buildClaudeArgs(event: Record<string, unknown>): ClaudeArgs {
     "-p",
     prompt,
     "--allowedTools",
-    "mcp__linear_agent*,Read,Write,Edit,Bash,Grep,Glob,Agent",
+    "mcp__linear-agent*,Read,Write,Edit,Bash,Grep,Glob,Agent",
   ];
 
   return { prompt, cliArgs };
