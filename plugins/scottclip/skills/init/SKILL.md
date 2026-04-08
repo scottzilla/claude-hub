@@ -1,7 +1,7 @@
 ---
 name: scottclip-init
 description: This skill should be used when the user asks to "initialize scottclip", "set up scottclip", "scottclip init", "configure scottclip for this repo", or runs the /scottclip-init command. Scaffolds a repo with ScottClip config, persona directories, and Linear labels.
-version: 0.2.0
+version: 0.3.0
 ---
 
 # ScottClip Initialization
@@ -71,7 +71,7 @@ Resolve the plugin root path (`${CLAUDE_PLUGIN_ROOT}`). The MCP server is bundle
 
 Always install dependencies and build the MCP server to ensure it's up to date:
 ```
-Run via Bash: cd <resolved_plugin_root>/mcp/linear-agent && npm install && npm run build
+Run via Bash: cd <resolved_plugin_root>/mcp/linear-agent && rm -rf dist && npm install && npm run build
 ```
 This MUST succeed before proceeding — without it, the MCP server won't load after restart.
 
@@ -116,46 +116,65 @@ The MCP tools won't be available until after a restart. But we can still authori
    Run via Bash: mkdir -p .scottclip
    ```
 
-2. Stop any existing process on port 3847 and start a fresh server as a detached background daemon:
+2. Check if the server is already running:
    ```
-   Run via Bash: cd <resolved_plugin_root>/mcp/linear-agent && nohup node dist/server.js > <agent_cwd>/.scottclip/server.log 2>&1 & echo $!
+   Run via Bash: lsof -i :3847
    ```
-   Capture the PID from the output and save it:
-   ```
-   Run via Bash: echo <pid> > <agent_cwd>/.scottclip/.server.pid
-   ```
-   The server reads credentials from `.scottclip/.env` written in Step 2.
-   The `nohup` ensures the server persists after the Claude Code session ends.
+   - **Port is in use** → server is already running. Skip to step 4 (authorization flow).
+   - **Port is free** → proceed to start the server.
 
-3. Poll the health endpoint to confirm the server is up. Check every 2 seconds for up to 10 seconds:
+3. Start the server as a background process (visible in Claude Code status line):
    ```
-   Run via Bash: curl -s http://localhost:3847/ 2>/dev/null
+   Run via Bash (background): cd <agent_cwd> && AGENT_CWD=<agent_cwd> node <resolved_plugin_root>/mcp/linear-agent/dist/server.js 2>&1 | tee .scottclip/server.log
    ```
-   - **Response contains "ScottClip"** → server is running. Report:
+   Use `run_in_background: true` on the Bash tool call so it appears as an active task in the status line.
+   The server reads credentials from `.scottclip/.env` written in Step 2.
+
+   Wait 2 seconds, then verify the server started:
+   ```
+   Run via Bash: lsof -i :3847
+   ```
+   - **Shows a listening process** → server is running. Report:
      ```
-     ✓ Server running on port 3847 (PID <pid>)
+     ✓ Server running on port 3847
        MCP:     http://localhost:3847/mcp
        Webhook: http://localhost:3847/webhook
        OAuth:   http://localhost:3847/oauth/callback
      ```
-   - **Timeout after 10 seconds** → report error and show the log tail:
+   - **No process found** → report error and show the log tail:
      ```
      Run via Bash: tail -20 <agent_cwd>/.scottclip/server.log
      ```
      Stop and ask the user to resolve the issue before retrying.
 
-4. Build the authorization URL:
+4. **Check for existing token** — look for a valid token file:
+   ```
+   Run via Bash: cat <agent_cwd>/.scottclip/token.json 2>/dev/null
+   ```
+   - **Token file exists and contains `access_token`** → report "✓ Already authorized with Linear!" and skip to Prompt Restart.
+   - **No token file or missing `access_token`** → proceed to step 5.
+
+5. **Attempt client_credentials token** — try to fetch a token directly (no browser needed):
+   ```
+   Run via Bash: curl -s -X POST https://api.linear.app/oauth/token \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -d "grant_type=client_credentials&client_id=<client_id>&client_secret=<client_secret>&actor=app"
+   ```
+   - **Response contains `access_token`** → save the token to `<agent_cwd>/.scottclip/token.json` (as `{"access_token":"...","expires_at":"..."}`, computing `expires_at` from `expires_in`). Report "✓ Authorized with Linear (client credentials)!" and skip to Prompt Restart.
+   - **Error or `client_credentials` not supported** → proceed to step 6 (browser auth).
+
+6. **Build the authorization URL** (browser fallback):
    ```
    https://linear.app/oauth/authorize?client_id=<client_id>&redirect_uri=<tunnel_hostname>/oauth/callback&response_type=code&scope=read,write,app:assignable,app:mentionable&actor=app
    ```
 
-5. Open the browser:
+7. **Open the browser:**
    ```
    Run via Bash: open "<authorization_url>"
    ```
    Report: "Opening Linear authorization in your browser. Approve the app and return here."
 
-6. Poll for the token file — check every 5 seconds for up to 90 seconds. The token is stored at `<agent_cwd>/.scottclip/token.json`:
+8. **Poll for the token file** — check every 5 seconds for up to 90 seconds. The token is stored at `<agent_cwd>/.scottclip/token.json`:
    ```
    Run via Bash: cat <agent_cwd>/.scottclip/token.json 2>/dev/null
    ```
@@ -169,7 +188,7 @@ The MCP tools won't be available until after a restart. But we can still authori
 ✓ .mcp.json configured (project-level)
 ✓ .scottclip/.env written
 ✓ Authorized with Linear
-✓ Server running in background (PID <pid>) — persists after restart
+✓ Server running in background on port 3847
 
 Restart Claude Code to load the MCP server, then re-run /scottclip-init to complete setup.
 ```
