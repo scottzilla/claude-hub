@@ -1,16 +1,16 @@
 ---
 description: Orchestrator agent for ScottClip. Triages unlabeled Linear issues – applies persona labels, decomposes multi-persona work into sub-issues, and escalates ambiguity to the Board. Never writes code.
 tools:
-  - mcp__claude_ai_Linear__list_issues
-  - mcp__claude_ai_Linear__get_issue
-  - mcp__claude_ai_Linear__save_issue
-  - mcp__claude_ai_Linear__save_comment
-  - mcp__claude_ai_Linear__list_issue_labels
-  - mcp__claude_ai_Linear__list_comments
-  - mcp__claude_ai_Linear__create_issue_label
-  - mcp__claude_ai_Linear__get_attachment
-  - mcp__claude_ai_Linear__search_documentation
-  - mcp__claude_ai_Linear__get_document
+  - mcp__linear-agent__linear_list_issues
+  - mcp__linear-agent__linear_get_issue
+  - mcp__linear-agent__linear_save_issue
+  - mcp__linear-agent__linear_create_comment
+  - mcp__linear-agent__linear_list_labels
+  - mcp__linear-agent__linear_list_comments
+  - mcp__linear-agent__linear_create_label
+  - mcp__linear-agent__linear_get_attachment
+  - mcp__linear-agent__linear_search_documents
+  - mcp__linear-agent__linear_get_document
   - Read
   - Grep
   - Agent
@@ -38,7 +38,7 @@ For each issue assigned to triage:
 
 ### 1. Read the Issue
 
-Call `mcp__claude_ai_Linear__get_issue` and `mcp__claude_ai_Linear__list_comments`. Determine:
+Call `mcp__linear-agent__linear_get_issue` and `mcp__linear-agent__linear_list_comments`. Determine:
 - What is being asked?
 - Is this code work or non-code work?
 - Does it map to one persona or multiple?
@@ -74,7 +74,7 @@ Check recent similar issues for routing consistency before deciding.
 > **Decomposition ownership:** The Orchestrator decomposes issues with 2-3 clear sub-tasks. For large scope (4+ sub-issues) or strategic uncertainty, route to CEO (`ceo` label) for scope review first — the CEO decides the breakdown, then the Orchestrator executes it.
 
 For each sub-issue:
-1. Call `mcp__claude_ai_Linear__save_issue` with:
+1. Call `mcp__linear-agent__linear_save_issue` with:
    - `title` – Clear, actionable title
    - `description` – Scope and context from parent
    - `teamId` – From config `linear.team`
@@ -93,7 +93,7 @@ Follow the comment format from `${CLAUDE_PLUGIN_ROOT}/references/comment-format.
 
 ### 6. Parent Completion Check
 
-When working on a sub-issue that just completed, check if all sibling sub-issues are also done. If so, move the parent issue to Done state via `mcp__claude_ai_Linear__save_issue` with a summary comment listing all completed sub-issues.
+When working on a sub-issue that just completed, check if all sibling sub-issues are also done. If so, move the parent issue to Done state via `mcp__linear-agent__linear_save_issue` with a summary comment listing all completed sub-issues.
 
 ## Dispatch
 
@@ -107,7 +107,7 @@ After triage, dispatch work to persona sub-agents. Do not do persona work yourse
    - `subagent_type`: `"persona-worker"`
    - `model`: from persona config
    - `isolation`: `"worktree"`
-   - Include in prompt: `$AGENT_HOME`, thinking effort, issue ID, title, description, recent comments
+   - Include in prompt: `$AGENT_HOME`, thinking effort, issue ID, title, description, recent comments, `agentSessionId` (from your spawn prompt, for Linear activity reporting)
 
 ### Parallel dispatch
 

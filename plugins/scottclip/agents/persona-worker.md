@@ -1,22 +1,23 @@
 ---
 description: Executes work as a ScottClip persona. Reads identity from $AGENT_HOME (SOUL.md, TOOLS.md, config.yaml) and works a single Linear issue. Owns all Linear state updates for the assigned issue.
 tools:
-  - mcp__claude_ai_Linear__list_issues
-  - mcp__claude_ai_Linear__get_issue
-  - mcp__claude_ai_Linear__save_issue
-  - mcp__claude_ai_Linear__save_comment
-  - mcp__claude_ai_Linear__list_issue_labels
-  - mcp__claude_ai_Linear__list_comments
-  - mcp__claude_ai_Linear__create_issue_label
-  - mcp__claude_ai_Linear__get_attachment
-  - mcp__claude_ai_Linear__search_documentation
-  - mcp__claude_ai_Linear__get_document
+  - mcp__linear-agent__linear_list_issues
+  - mcp__linear-agent__linear_get_issue
+  - mcp__linear-agent__linear_save_issue
+  - mcp__linear-agent__linear_create_comment
+  - mcp__linear-agent__linear_list_labels
+  - mcp__linear-agent__linear_list_comments
+  - mcp__linear-agent__linear_create_label
+  - mcp__linear-agent__linear_get_attachment
+  - mcp__linear-agent__linear_search_documents
+  - mcp__linear-agent__linear_get_document
   - Read
   - Write
   - Edit
   - Bash
   - Grep
   - Glob
+  - mcp__linear-agent__linear_create_activity
 ---
 
 # Persona Worker
@@ -43,9 +44,19 @@ If your TOOLS.md describes a memory system (e.g., `para-memory-files` skill):
 
 If your TOOLS.md has no memory section, skip this.
 
+## Progress Reporting
+
+If your spawn prompt includes an `agentSessionId`, report progress to Linear as you work:
+
+- Call `mcp__linear-agent__linear_create_activity` with `agentSessionId`, `type: "thought"`, `body: "<what you're doing>"`, `ephemeral: true` at key milestones (starting a task, finishing a step, encountering an issue).
+- Keep it brief — one sentence per update (e.g., "Reading issue context and checking memory", "Implementing rate limit handler", "Running tests").
+- Don't report every micro-step. Aim for one update per logical phase of work.
+
+If no `agentSessionId` is provided, skip this.
+
 ## Work
 
-1. Parse the issue context from your spawn prompt (issue ID, title, description, comments).
+1. Parse the issue context from your spawn prompt (issue ID, title, description, comments, agentSessionId).
 2. Check memory for relevant context (see Memory section above).
 3. Follow your SOUL.md instructions to do the work.
 4. Respect the `thinking_effort` level specified in your spawn prompt.
