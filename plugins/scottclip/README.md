@@ -207,7 +207,7 @@ Use `/persona-import` to convert Paperclip agent directories into ScottClip pers
 
 ## Background
 
-ScottClip is inspired by [Paperclip](https://github.com/paperclipai/paperclip), an agent orchestration platform that uses a central API for task management, agent checkout, and chain-of-command routing. ScottClip takes the same core ideas – persona-based identity, structured heartbeats, hierarchical escalation – and rebuilds them as a Claude Code plugin backed by Linear instead of a custom API. The result is simpler (no database, optional lightweight webhook receiver) while keeping the parts that worked well: SOUL.md for agent identity, structured comments for audit trails, and a CEO/worker hierarchy for task decomposition.
+ScottClip is a substantial extension of [WoterClip](https://github.com/wotai-dev/woterclip) which is inspired by [Paperclip](https://github.com/paperclipai/paperclip), an agent orchestration platform that uses a central API for task management, agent checkout, and chain-of-command routing. ScottClip takes the same core ideas – persona-based identity, structured heartbeats, hierarchical escalation – and rebuilds them as a Claude Code plugin backed by Linear instead of a custom API. The result is simpler (no database, optional lightweight webhook receiver) while keeping the parts that worked well: SOUL.md for agent identity, structured comments for audit trails, and a CEO/worker hierarchy for task decomposition.
 
 ## Design
 
