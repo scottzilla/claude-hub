@@ -318,7 +318,44 @@ Converts existing persona directories to role files:
 | `orchestrator.md` (plugin agent) | `orchestrator.md` (project-level agent) |
 | `templates/personas/` | `templates/roles/` + `templates/agents/` |
 
-## 12. Open Questions
+## 12. Verification & Review Dispatch
+
+### Verification inference
+
+When a worker creates or updates a Linear issue, the orchestrator checks for clear acceptance criteria. If none exist, the worker **infers a verification step** and flags it in the Linear comment:
+
+> *Note: No acceptance criteria were specified. Inferred verification: [X]. Review and adjust if needed.*
+
+This applies to sub-issue creation too — every sub-issue should have a testable "done" condition.
+
+### Same-pass review dispatch
+
+After each worker returns, the orchestrator reads the worker's Linear comment and issue state to decide if a review pass is needed:
+
+```
+For each completed worker:
+  1. Read the worker's Linear comment and issue state
+  2. If state = "In Review" OR comment requests another role's verification:
+     → Spawn a fresh reviewer worker with:
+       - Role inferred from the handoff context (e.g., "frontend verifier")
+       - The implementation diff/commits as context
+       - Instruction: "Verify, don't re-implement"
+  3. If state = "Done": move on
+  4. If state = "Blocked": escalate to Board
+```
+
+This collapses multi-heartbeat handoffs into a single orchestration pass. The reviewer gets **fresh context** with no bias from the implementation session.
+
+**Examples:**
+- Backend worker implements API change, comments "needs frontend verification" → orchestrator spawns frontend-role reviewer immediately
+- CTO worker makes architecture decision, comments "backend should verify feasibility" → orchestrator spawns backend-role reviewer
+- Worker marks issue "In Review" with no explicit handoff → orchestrator spawns a general reviewer role with the diff
+
+### Writer/Reviewer separation
+
+The reviewer worker is the same `worker.md` agent definition — just spawned with a different role line and the prior worker's output as context. No separate agent definition needed. The fresh context is the key benefit: the reviewer sees only the issue, the diff, and the verification criteria, not the implementation journey.
+
+## 13. Open Questions
 
 1. **Model override per role.** The worker agent definition sets a default model (e.g., opus). Should the orchestrator be able to override the model per spawn (e.g., use sonnet for a simple role)? Agent frontmatter does not currently support per-invocation overrides. Workaround: multiple worker agent definitions (`worker-opus.md`, `worker-sonnet.md`).
 
