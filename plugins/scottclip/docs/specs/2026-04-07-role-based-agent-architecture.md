@@ -190,9 +190,40 @@ Key changes from current persona-worker:
 
 Skills replace domain knowledge that currently lives in SOUL.md and TOOLS.md.
 
-### How it works
+### Skill tiers
 
-The orchestrator decides which skills a worker needs based on the role and issue context. It includes skill references in the worker's spawn prompt:
+| Tier | Source | Lifecycle | Examples |
+|------|--------|-----------|----------|
+| **Plugin-shipped** | `${CLAUDE_PLUGIN_ROOT}/skills/` | Universal, ships with plugin | `linear-workflow`, `comment-format`, `label-conventions` |
+| **Init-generated** | `.scottclip/skills/` | Created at init by scanning the codebase | `testing-patterns` (detected vitest), `api-conventions` (detected Express) |
+| **User-created** | `.scottclip/skills/` | Created manually or via `/refresh-skills` | Custom domain knowledge, team conventions |
+
+### Role → skill mapping
+
+Config.yaml maps roles to the skills they need:
+
+```yaml
+roles:
+  directory: "roles"
+  defaults:
+    skills: [linear-workflow]     # every role gets these
+  labels:
+    backend:
+      file: "backend.md"
+      skills: [code-review, testing-patterns]
+    frontend:
+      file: "frontend.md"
+      skills: [code-review, ui-conventions]
+    ceo:
+      file: "ceo.md"
+      skills: [architecture-decisions, scope-review]
+```
+
+The orchestrator reads this config and preloads `defaults.skills` + role-specific skills for each worker spawn. For ad-hoc roles (no config entry), the orchestrator uses judgment to pick from available skills.
+
+### How preloading works
+
+The orchestrator includes skill references in the worker's spawn prompt:
 
 ```
 ## Role
@@ -200,9 +231,43 @@ The orchestrator decides which skills a worker needs based on the role and issue
 
 ## Skills (preloaded)
 - Read and follow: ${CLAUDE_PLUGIN_ROOT}/skills/linear-workflow/SKILL.md
+- Read and follow: .scottclip/skills/testing-patterns/SKILL.md
 - Read and follow: ${CLAUDE_PLUGIN_ROOT}/references/comment-format.md
-- Read and follow: ${CLAUDE_PLUGIN_ROOT}/references/label-conventions.md
 ```
+
+Skills listed in the spawn prompt are **preloaded** — the worker reads them at startup as part of its context. This is distinct from skills that are merely available for invocation. The orchestrator controls what gets preloaded.
+
+### Init-generated skills
+
+During `/scottclip-init`, after the user selects roles, init scans the codebase to generate role-appropriate skills:
+
+1. Detect frameworks, test runners, linters, directory structure
+2. Read existing CLAUDE.md for conventions
+3. For each role, generate skills tailored to what the codebase contains
+4. Present the generated skills for user review before writing
+
+**Example:** Init detects vitest + `test/helpers/` + Drizzle ORM → generates `testing-patterns` skill (vitest conventions, helper usage) and `migration-patterns` skill (Drizzle migration conventions from existing files).
+
+### `/refresh-skills` command
+
+Re-scans the codebase at any time and suggests skill changes:
+
+1. Scan codebase (frameworks, patterns, test runners, directory structure)
+2. Read existing `.scottclip/skills/`
+3. Read recent Linear issues + worker memory for recurring patterns
+4. Present suggestions — don't auto-create:
+
+```
+Suggested skill changes:
+  + New: migration-patterns — detected Drizzle ORM + db/migrations/ with 12 migration files
+  + New: api-error-handling — workers hit similar error handling 3 times in recent issues
+  ~ Update: testing-patterns — vitest config changed, new test utilities in test/helpers/
+  - Remove: ui-conventions — no frontend code detected anymore
+
+Create these? [y/n/edit]
+```
+
+The "recent issues" signal is key: if workers keep solving the same type of problem, that's a signal a skill would help. Worker memory (§7) accumulates this data over time.
 
 ### What moves from SOUL.md to skills
 
@@ -212,11 +277,7 @@ The orchestrator decides which skills a worker needs based on the role and issue
 | TOOLS.md Linear patterns | `skills/linear-workflow/SKILL.md` | Comment posting, label management, relations |
 | TOOLS.md memory patterns | Removed | Replaced by native `memory: project` |
 | SOUL.md quality checklist | Role file | Stays role-specific (backend vs frontend differ) |
-| TOOLS.md common patterns | `references/common-patterns.md` | Feature impl, bug fix, database work recipes |
-
-### Skill preloading vs invocation
-
-Skills listed in the spawn prompt are **preloaded** — the worker reads them at startup as part of its context. This is distinct from skills that are merely available for invocation. The orchestrator controls what gets preloaded.
+| TOOLS.md common patterns | Init-generated skills | Feature impl, bug fix, database work recipes |
 
 ## 7. Memory Model
 
