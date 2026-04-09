@@ -108,7 +108,7 @@ Labels become optional hints, not required routing keys:
 | Issue has no persona label | Orchestrator infers role from issue context |
 | Orchestrator is uncertain | Escalate to Board (same as today) |
 
-The `personas:` map in config.yaml is replaced by a simpler `roles:` section:
+The `personas:` map in config.yaml is replaced by a simpler `roles:` section. Skills are managed in `worker.md` frontmatter (§6), not in config:
 
 ```yaml
 roles:
@@ -198,53 +198,40 @@ Skills replace domain knowledge that currently lives in SOUL.md and TOOLS.md.
 | **Init-generated** | `.scottclip/skills/` | Created at init by scanning the codebase | `testing-patterns` (detected vitest), `api-conventions` (detected Express) |
 | **User-created** | `.scottclip/skills/` | Created manually or via `/refresh-skills` | Custom domain knowledge, team conventions |
 
-### Role → skill mapping
+### All skills preloaded via worker frontmatter
 
-Config.yaml maps roles to the skills they need:
+Rather than mapping skills per role, **every worker gets the full skill set** via the `skills:` frontmatter field in `worker.md`:
 
 ```yaml
-roles:
-  directory: "roles"
-  defaults:
-    skills: [linear-workflow]     # every role gets these
-  labels:
-    backend:
-      file: "backend.md"
-      skills: [code-review, testing-patterns]
-    frontend:
-      file: "frontend.md"
-      skills: [code-review, ui-conventions]
-    ceo:
-      file: "ceo.md"
-      skills: [architecture-decisions, scope-review]
+---
+name: worker
+skills:
+  - scottclip:linear-workflow
+  - testing-patterns
+  - api-conventions
+---
 ```
 
-The orchestrator reads this config and preloads `defaults.skills` + role-specific skills for each worker spawn. For ad-hoc roles (no config entry), the orchestrator uses judgment to pick from available skills.
+Claude Code injects the full content of each skill into the worker's context at startup. The role line + issue context is what differentiates each spawn — not which skills are loaded. A backend worker and a frontend worker both know the testing patterns; the role determines whether they apply them.
 
-### How preloading works
+This simplifies the system:
+- No role→skill mapping in config.yaml
+- No orchestrator logic to pick skills per role
+- Init generates project skills and adds them to `worker.md` frontmatter
+- `/refresh-skills` updates the skills AND updates the `skills:` list in `worker.md`
 
-The orchestrator includes skill references in the worker's spawn prompt:
-
-```
-## Role
-[contents of roles/backend.md]
-
-## Skills (preloaded)
-- Read and follow: ${CLAUDE_PLUGIN_ROOT}/skills/linear-workflow/SKILL.md
-- Read and follow: .scottclip/skills/testing-patterns/SKILL.md
-- Read and follow: ${CLAUDE_PLUGIN_ROOT}/references/comment-format.md
-```
-
-Skills listed in the spawn prompt are **preloaded** — the worker reads them at startup as part of its context. This is distinct from skills that are merely available for invocation. The orchestrator controls what gets preloaded.
+The cost is slightly more context per worker (skills they might not use). But skills should be concise, and the simplicity outweighs a few hundred tokens of unused context.
 
 ### Init-generated skills
 
-During `/scottclip-init`, after the user selects roles, init scans the codebase to generate role-appropriate skills:
+During `/scottclip-init`, after the user selects roles, init scans the codebase to generate project-specific skills:
 
 1. Detect frameworks, test runners, linters, directory structure
 2. Read existing CLAUDE.md for conventions
-3. For each role, generate skills tailored to what the codebase contains
-4. Present the generated skills for user review before writing
+3. Review existing `.scottclip/skills/` — only create a new skill when no suitable candidate exists
+4. Generate skills tailored to what the codebase contains
+5. Present the generated skills for user review before writing
+6. Add generated skills to `worker.md`'s `skills:` frontmatter
 
 **Example:** Init detects vitest + `test/helpers/` + Drizzle ORM → generates `testing-patterns` skill (vitest conventions, helper usage) and `migration-patterns` skill (Drizzle migration conventions from existing files).
 
@@ -253,7 +240,7 @@ During `/scottclip-init`, after the user selects roles, init scans the codebase 
 Re-scans the codebase at any time and suggests skill changes:
 
 1. Scan codebase (frameworks, patterns, test runners, directory structure)
-2. Read existing `.scottclip/skills/`
+2. Read existing `.scottclip/skills/` — prefer updating existing skills over creating new ones
 3. Read recent Linear issues + worker memory for recurring patterns
 4. Present suggestions — don't auto-create:
 
@@ -266,6 +253,8 @@ Suggested skill changes:
 
 Create these? [y/n/edit]
 ```
+
+5. On approval, update `.scottclip/skills/` and sync the `skills:` list in `worker.md`
 
 The "recent issues" signal is key: if workers keep solving the same type of problem, that's a signal a skill would help. Worker memory (§7) accumulates this data over time.
 
