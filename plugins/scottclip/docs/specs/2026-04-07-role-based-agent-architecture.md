@@ -342,9 +342,6 @@ Workers hitting `maxTurns` or working on multi-phase tasks should be aware of co
 - The worker's system prompt instructs it to wrap up cleanly when approaching `maxTurns` — commit what's done, report progress, and note what remains.
 - For long tasks, the orchestrator can spawn sequential workers: first worker explores and plans, second worker implements based on the plan.
 
-### Dry-run validation
-
-`/heartbeat --dry-run` validates the orchestrator's triage before dispatching real work. The orchestrator runs its full triage pass — reading issues, inferring roles, planning skill preloads — but stops before spawning workers. It reports what it would do, giving the user a chance to correct before real dispatch. This follows the "test on a few files, then scale" pattern.
 
 ## 13. Verification & Review Dispatch
 
