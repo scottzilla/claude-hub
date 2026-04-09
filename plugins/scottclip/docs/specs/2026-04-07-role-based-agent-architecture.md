@@ -318,7 +318,35 @@ Converts existing persona directories to role files:
 | `orchestrator.md` (plugin agent) | `orchestrator.md` (project-level agent) |
 | `templates/personas/` | `templates/roles/` + `templates/agents/` |
 
-## 12. Verification & Review Dispatch
+## 12. Worker Execution Model
+
+Best practices from the Claude Code docs inform how workers and the orchestrator operate.
+
+### Explore → Plan → Code
+
+Workers follow a mandatory three-phase execution model:
+
+1. **Explore** — Read the issue, codebase context, and memory. Understand the problem before touching code. Use the Explore subagent pattern (read-only tools) to gather context without consuming the worker's main context.
+2. **Plan** — Form a plan: what files to change, what tests to write, what the verification looks like. Post the plan as an ephemeral activity to Linear so it's visible.
+3. **Code** — Implement, test, commit. Only after phases 1 and 2.
+
+This is encoded in the worker's system prompt, not left to LLM judgment.
+
+### Orchestrator pre-research
+
+Before spawning workers, the orchestrator uses the **Explore** agent to research the codebase context relevant to the issue. It then includes those findings in the worker's spawn prompt. This keeps the worker focused on implementation rather than exploration, and avoids the worker reading hundreds of files into its own context.
+
+### Context hygiene
+
+Workers hitting `maxTurns` or working on multi-phase tasks should be aware of context limits:
+- The worker's system prompt instructs it to wrap up cleanly when approaching `maxTurns` — commit what's done, report progress, and note what remains.
+- For long tasks, the orchestrator can spawn sequential workers: first worker explores and plans, second worker implements based on the plan.
+
+### Dry-run validation
+
+`/heartbeat --dry-run` validates the orchestrator's triage before dispatching real work. The orchestrator runs its full triage pass — reading issues, inferring roles, planning skill preloads — but stops before spawning workers. It reports what it would do, giving the user a chance to correct before real dispatch. This follows the "test on a few files, then scale" pattern.
+
+## 13. Verification & Review Dispatch
 
 ### Verification inference
 
@@ -355,7 +383,7 @@ This collapses multi-heartbeat handoffs into a single orchestration pass. The re
 
 The reviewer worker is the same `worker.md` agent definition — just spawned with a different role line and the prior worker's output as context. No separate agent definition needed. The fresh context is the key benefit: the reviewer sees only the issue, the diff, and the verification criteria, not the implementation journey.
 
-## 13. Open Questions
+## 14. Open Questions
 
 1. **Model override per role.** The worker agent definition sets a default model (e.g., opus). Should the orchestrator be able to override the model per spawn (e.g., use sonnet for a simple role)? Agent frontmatter does not currently support per-invocation overrides. Workaround: multiple worker agent definitions (`worker-opus.md`, `worker-sonnet.md`).
 
