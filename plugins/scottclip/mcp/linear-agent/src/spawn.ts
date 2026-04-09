@@ -98,8 +98,6 @@ export function buildClaudeArgs(
   const userName = (creator?.name || "someone") as string;
 
   const lines = [
-    `You are responding to a Linear agent session.`,
-    ``,
     `## Session`,
     `- Session ID: ${sessionId}`,
     `- Action: ${action}`,
@@ -152,25 +150,6 @@ export function buildClaudeArgs(
   if (guidance) {
     lines.push(``, `## Workspace Guidance`, guidance);
   }
-
-  lines.push(
-    ``,
-    `## Persona Resolution`,
-    ``,
-    `1. Read .scottclip/config.yaml to get the personas map (label → persona directory)`,
-    `2. Match issue labels [${issueLabels.join(", ")}] to a persona`,
-    `3. If a persona matches: spawn a persona-worker Agent with AGENT_HOME set to the persona directory`,
-    `   - The persona-worker reads SOUL.md for identity, TOOLS.md for tool constraints`,
-    `   - Pass all session context (session ID, issue, user message) to the worker`,
-    `4. If no persona label: act as the orchestrator — triage, apply label, then spawn worker`,
-    ``,
-    `## Session Reporting`,
-    ``,
-    `Use linear_create_activity with agentSessionId: "${sessionId}" to report progress.`,
-    `Use linear_save_comment to post responses on the issue.`,
-    ``,
-    `Do NOT run /heartbeat. You have all the context you need.`,
-  );
 
   const prompt = lines.join("\n");
 
@@ -255,8 +234,7 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
   // Spawn with pipe for stdout so we can read it
   const child = spawn(CLAUDE_BIN, [
     "-p",
-    "--permission-mode", "bypassPermissions",
-    "--allowedTools", "mcp__linear-agent*,Read,Write,Edit,Bash,Grep,Glob,Agent",
+    "--agent", "orchestrator",
     "--output-format", "stream-json",
     "--verbose",
   ], {

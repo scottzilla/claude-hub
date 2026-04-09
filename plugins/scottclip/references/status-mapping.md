@@ -21,13 +21,13 @@ Maps between Linear issue states and ScottClip agent behavior. Linear states are
 | Heartbeat picks up issue | Todo | In Progress | Agent |
 | Work completed, agent confident | In Progress | Done | Agent |
 | Work completed, wants human check | In Progress | In Review | Agent |
-| Work completed, needs another persona | In Progress | Todo (+ swap persona label) | Agent |
+| Work completed, needs another role | In Progress | Todo (+ swap role label) | Agent |
 | Agent is blocked | In Progress | Blocked | Agent |
 | Human unblocks issue | Blocked | Todo | Human |
 | Human approves review | In Review | Done | Human |
 | Human requests changes | In Review | Todo | Human |
 
-All state transitions use `mcp__claude_ai_Linear__save_issue` with the target state name.
+All state transitions use `mcp__linear-agent__linear_save_issue` with the target state name.
 
 ## Inbox Query
 
@@ -40,10 +40,10 @@ The heartbeat fetches all issues in the configured project (from `config.yaml` â
 
 ### Filter Rules
 
-- Skip issues without a persona label (unless Orchestrator is default)
+- Skip issues without a role label (unless Orchestrator is default)
 - Skip Blocked issues unless new human comments exist since last agent comment
 - Skip issues in states other than Todo or In Progress
-- If `--persona <name>` flag is set, only match that persona's label
+- If `--role <name>` flag is set, only match that role's label
 
 ## Stale Detection
 

@@ -1,6 +1,6 @@
 # ScottClip Configuration
 # Created by /scottclip-init – customize for your repo
-version: 1
+version: 2
 
 # Linear workspace settings
 linear:
@@ -37,21 +37,13 @@ heartbeat:
 
 # Linear label configuration
 labels:
-  group: "ScottClip"                 # Parent label group for persona labels (auto-created by init)
+  group: "ScottClip"                 # Parent label group for role labels (auto-created by init)
 
-# Persona routing: Linear label → persona directory
-# The Orchestrator (is_default: true) handles issues with no persona label
-personas:
-  orchestrator:
-    path: "personas/orchestrator"
-    label: null
-    is_default: true
-  ceo:
-    path: "personas/ceo"
-    label: "ceo"
-  backend:
-    path: "personas/backend"
-    label: "backend"
-  frontend:
-    path: "personas/frontend"
-    label: "frontend"
+# Role routing: Linear label → role file
+# Labels are optional hints. The orchestrator infers roles when no label matches.
+roles:
+  directory: "roles"                 # Relative to .scottclip/
+  labels:                            # Optional label → role file mapping
+    backend: "backend.md"
+    frontend: "frontend.md"
+    ceo: "ceo.md"

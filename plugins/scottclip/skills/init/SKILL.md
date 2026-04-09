@@ -1,18 +1,18 @@
 ---
 name: scottclip-init
-description: This skill should be used when the user asks to "initialize scottclip", "set up scottclip", "scottclip init", "configure scottclip for this repo", or runs the /scottclip-init command. Scaffolds a repo with ScottClip config, persona directories, and Linear labels.
-version: 0.3.0
+description: This skill should be used when the user asks to "initialize scottclip", "set up scottclip", "scottclip init", "configure scottclip for this repo", or runs the /scottclip-init command. Scaffolds a repo with ScottClip config, role files, agent definitions, and Linear labels.
+version: 0.4.0
 ---
 
 # ScottClip Initialization
 
-Initialize ScottClip in the current repository. Creates `.mcp.json` (project-level MCP server config), authorizes with Linear via OAuth, and scaffolds `.scottclip/` with config, persona templates, and Linear labels.
+Initialize ScottClip in the current repository. Creates `.mcp.json` (project-level MCP server config), authorizes with Linear via OAuth, and scaffolds `.scottclip/` with config and role files, `.claude/agents/` with agent definitions, and Linear labels.
 
 ## Flow Overview
 
 ```
 Phase 1 (first run):  Collect credentials → Write .mcp.json + .scottclip/.env → Start server → Browser auth → Restart
-Phase 2 (after restart): Verify auth → Pick team → Choose personas → Create labels → Scaffold config → Done
+Phase 2 (after restart): Verify auth → Pick team → Choose roles → Create labels → Scaffold config + roles + agents → Generate skills → Done
 ```
 
 Phase 1 and Phase 2 are both handled by `/scottclip-init`. The skill detects which phase to run based on current state.
@@ -21,7 +21,7 @@ Phase 1 and Phase 2 are both handled by `/scottclip-init`. The skill detects whi
 
 Run these checks at the start to determine where to resume:
 
-1. **`.scottclip/config.yaml` exists AND `linear-agent` tools available** → this is a re-initialization. Skip to the "Re-initialization" section at the bottom.
+1. **`.scottclip/config.yaml` exists AND `.claude/agents/orchestrator.md` exists AND `linear-agent` tools available** → this is a re-initialization. Skip to the "Re-initialization" section at the bottom.
 
 2. **`.mcp.json` has `linear-agent` entry AND tools are available** → Phase 1 is done. Jump to **Phase 2**.
 
@@ -218,51 +218,80 @@ Call `linear_get_viewer`.
    - Their **display name** for @-mentions in comments (pre-filled from Linear)
    - Their **board user name** for escalation @-mentions (pre-fill with same value as display name)
 
-### Step 3: Choose Persona Preset
+### Step 3: Choose Role Preset
 
-Ask the user which persona set to scaffold:
+Ask the user which role set to scaffold:
 
-| Preset | Personas Created |
-|--------|-----------------|
-| **engineering** (default) | Orchestrator, CEO, Backend, Frontend |
-| **full** | Orchestrator, CEO, Backend, Frontend, Infra, QA |
-| **minimal** | Orchestrator, CEO only |
-| **custom** | Orchestrator, CEO + user-specified personas |
+| Preset | Roles Created |
+|--------|--------------|
+| **engineering** (default) | Backend, Frontend, CEO |
+| **full** | Backend, Frontend, CEO + user-specified roles |
+| **minimal** | CEO only |
+| **custom** | User-specified roles |
 
-For "custom", ask the user to name each persona and its Linear label.
+Note: Orchestrator is not a role — it is scaffolded as a project-level agent for all presets.
+
+For "full" or "custom", ask the user to name each additional role and its Linear label.
 
 ### Step 4: Create Linear Labels
 
 1. Call `linear_list_labels` to check for existing labels.
 2. Call `linear_create_label` to create the parent group label (default: "ScottClip"). Skip if it already exists.
-3. Create child labels under the group — one per persona with a non-null label (e.g., `backend`, `frontend`). Pass the parent group's ID as `parentId`. Skip any that already exist.
+3. Create child labels under the group — one per role selected in Step 3 (e.g., `backend`, `frontend`, `ceo`). Pass the parent group's ID as `parentId`. Skip any that already exist.
 
-### Step 5: Scaffold Config & Personas
+### Step 5: Scaffold Config, Roles & Agents
 
 1. Create the directory structure:
    ```
    .scottclip/
    ├── config.yaml
-   └── personas/
-       ├── orchestrator/
-       │   ├── SOUL.md, TOOLS.md, config.yaml
-       ├── ceo/
-       │   ├── SOUL.md, TOOLS.md, config.yaml
-       ├── backend/          (if selected)
-       │   ├── SOUL.md, TOOLS.md, config.yaml
-       └── frontend/         (if selected)
-           ├── SOUL.md, TOOLS.md, config.yaml
+   └── roles/
+       ├── backend.md        (if selected)
+       ├── frontend.md       (if selected)
+       └── ceo.md
+   .claude/
+   └── agents/
+       ├── orchestrator.md
+       └── worker.md
    ```
 
-2. Copy templates from `${CLAUDE_PLUGIN_ROOT}/templates/`:
-   - Replace `{{USER_NAME}}` with the user's Linear display name
-   - Replace `{{BOARD_USER}}` with the board user name
-   - Replace `{{LINEAR_CLIENT_ID}}` with the OAuth client ID
-   - Replace `{{TEAM}}` with the selected team name
-   - Replace `{{TEAM_ID}}` with the selected team's `id` from the `linear_list_teams` response
-   - Write to `.scottclip/`
+2. Copy role templates from `${CLAUDE_PLUGIN_ROOT}/templates/roles/` to `.scottclip/roles/` — one `.md` file per selected role. Copy agent templates from `${CLAUDE_PLUGIN_ROOT}/templates/agents/` to `.claude/agents/` — always copy both `orchestrator.md` and `worker.md`. Replace these placeholders in ALL copied files:
+   - `{{USER_NAME}}` → user's Linear display name
+   - `{{BOARD_USER}}` → board user name
+   - `{{LINEAR_CLIENT_ID}}` → OAuth client ID
+   - `{{TEAM}}` → selected team name
+   - `{{TEAM_ID}}` → selected team's `id` from the `linear_list_teams` response
 
-3. Update `config.yaml` personas section to match the selected preset — remove entries for personas that weren't scaffolded.
+3. Update `config.yaml` roles section to match the selected preset — include only the roles that were scaffolded. Use the `roles:` key (not `personas:`):
+   ```yaml
+   roles:
+     directory: "roles"
+     labels:
+       backend: "backend.md"
+       frontend: "frontend.md"
+       ceo: "ceo.md"
+   ```
+
+### Step 5b: Generate Project Skills
+
+After scaffolding roles and agents, scan the codebase to generate project-specific skills:
+
+1. Detect frameworks, test runners, linters, and directory structure — look at `package.json`, config files, `src/`, `test/`, `db/` directories, etc.
+2. Read `CLAUDE.md` (if present) for project conventions.
+3. Check existing `.scottclip/skills/` — only create a new skill when no suitable candidate exists.
+4. Generate skills tailored to what the codebase contains. Examples:
+   - vitest + `test/helpers/` → `testing-patterns` skill
+   - Drizzle ORM + `db/migrations/` → `migration-patterns` skill
+   - Express or Hono → `api-conventions` skill
+5. Present the proposed skills to the user for review before writing:
+   ```
+   Detected skills to generate:
+     + testing-patterns  — vitest with helpers in test/helpers/
+     + api-conventions   — Express routes in src/routes/
+
+   Generate these? [y/n/edit]
+   ```
+6. On approval, write skills to `.scottclip/skills/` and add them to the `skills:` frontmatter in `.claude/agents/worker.md`.
 
 ### Step 6: Set Up Webhook (Optional)
 
@@ -323,12 +352,21 @@ Linear labels:
   ✓ ScottClip (group)
   ✓ backend
   ✓ frontend
+  ✓ ceo
 
-Personas:
-  ✓ orchestrator → default (no label)
-  ✓ ceo          → "ceo" label
-  ✓ backend      → "backend" label
-  ✓ frontend     → "frontend" label
+Roles:
+  ✓ ceo          → .scottclip/roles/ceo.md         ("ceo" label)
+  ✓ backend      → .scottclip/roles/backend.md     ("backend" label)
+  ✓ frontend     → .scottclip/roles/frontend.md    ("frontend" label)
+
+Agents:
+  ✓ orchestrator → .claude/agents/orchestrator.md
+  ✓ worker       → .claude/agents/worker.md
+
+Skills:
+  ✓ testing-patterns   → .scottclip/skills/testing-patterns/
+  ✓ api-conventions    → .scottclip/skills/api-conventions/
+  (or: ⚠ No project skills generated)
 
 Webhook:
   ✓ Registered (secret configured)    — or —    ⚠ Not configured (polling-only mode)
@@ -336,7 +374,7 @@ Webhook:
 Config: .scottclip/config.yaml
 
 Next steps:
-  1. Review and customize persona SOUL.md files
+  1. Review and customize role files in .scottclip/roles/
   2. Run /heartbeat --dry-run to test
   3. Run /scottclip-watch to start watching for issues
 ```
@@ -357,9 +395,10 @@ Next steps:
 
 ## Re-initialization
 
-If `.scottclip/config.yaml` already exists:
+If `.scottclip/config.yaml` already exists AND `.claude/agents/orchestrator.md` exists:
 
-1. Read the existing config version
-2. Ask the user: **overwrite** (fresh start), **merge** (add missing personas only), or **cancel**
-3. For merge: only create persona directories and labels that don't exist yet
-4. For overwrite: back up existing config to `config.yaml.bak` before writing
+1. Read the existing config version.
+2. **Version 1 config** (`personas:` section present, no `roles:` section): Inform the user this is a version 1 config and recommend running `/scottclip-migrate` to convert it to the role-based architecture. Do not attempt to merge or overwrite automatically — migration is a separate, explicit step.
+3. **Version 2 config** (`roles:` section present): Ask the user: **overwrite** (fresh start), **merge** (add missing roles only), or **cancel**.
+4. For merge: only create role files and labels that don't exist yet; re-run Step 5b to refresh generated skills.
+5. For overwrite: back up existing config to `config.yaml.bak` before writing.
