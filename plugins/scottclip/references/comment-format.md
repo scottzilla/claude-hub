@@ -1,11 +1,11 @@
 # Comment Format
 
-All heartbeat comments follow a structured template posted via `mcp__claude_ai_Linear__save_comment`.
+All heartbeat comments follow a structured template posted via `mcp__linear-agent__linear_create_comment`.
 
 ## Standard Template
 
 ```markdown
-**🤖 persona-name**
+**🤖 role-name**
 
 ## Heartbeat #N — YYYY-MM-DD HH:MM UTC (duration)
 
@@ -16,7 +16,7 @@ All heartbeat comments follow a structured template posted via `mcp__claude_ai_L
 - Description of non-commit work
 
 ### Created sub-issues
-- [WOT-XX](link) — Description (persona)
+- [WOT-XX](link) — Description (role)
 
 ### What's next
 - Next steps for this issue
@@ -25,13 +25,13 @@ All heartbeat comments follow a structured template posted via `mcp__claude_ai_L
 None
 
 ---
-*ScottClip · persona-name · [WOT-XX](link) · from [Heartbeat #N-1](link)*
+*ScottClip · role-name · [WOT-XX](link) · from [Heartbeat #N-1](link)*
 ```
 
 ## Blocked Template
 
 ```markdown
-**🤖 persona-name**
+**🤖 role-name**
 
 ## Heartbeat #N — YYYY-MM-DD HH:MM UTC (duration)
 
@@ -47,29 +47,29 @@ Clear description of what is blocking progress.
 - Work completed before hitting the blocker
 
 ---
-*ScottClip · persona-name · [WOT-XX](link)*
+*ScottClip · role-name · [WOT-XX](link)*
 ```
 
 ## Reassignment Template
 
 ```markdown
-**🤖 original-persona-name**
+**🤖 original-role-name**
 
 ## Heartbeat #N — YYYY-MM-DD HH:MM UTC (duration)
 
-**Status:** Reassigned → persona-name
+**Status:** Reassigned → role-name
 
 ### What was done
 - Work completed before handoff
 
 ### Handoff context
-What the next persona needs to know and do.
+What the next role needs to know and do.
 
 ### Why reassigning
-Reason this work belongs to the other persona.
+Reason this work belongs to the other role.
 
 ---
-*ScottClip · original-persona-name · [WOT-XX](link) · from [Heartbeat #N-1](link)*
+*ScottClip · original-role-name · [WOT-XX](link) · from [Heartbeat #N-1](link)*
 ```
 
 ## Triage Template
@@ -77,7 +77,7 @@ Reason this work belongs to the other persona.
 ```markdown
 **🤖 orchestrator**
 
-**Triage:** → persona-name
+**Triage:** → role-name
 
 Routing rationale (one line, only for non-obvious routing).
 
@@ -107,15 +107,15 @@ WOT-AA blocks WOT-BB (backend API must exist before frontend can integrate).
 
 ## Rules
 
-- Always start the comment with `**🤖 persona-name**` so the persona is immediately visible (all agents comment as the same Linear user)
+- Always start the comment with `**🤖 role-name**` so the role is immediately visible (all agents comment as the same Linear user)
 - Always include heartbeat counter (`#N`) and timestamp with duration
-- Always include persona name and issue link in footer
+- Always include role name and issue link in footer
 - Reference previous heartbeat comment link for carry-forward context
 - Blocked comments must name who needs to act (Board user's display name from config)
 - Completion comments must list shipped commits/PRs with links
 - Use `⚠️` prefix on status line for uncertain work: `**Status:** ⚠️ Completed (needs manual verification)`
 - Fast-path triage comments: `**Triage:** → backend` for obvious routing
-- Reassignment comments must explain what was done, what the next persona needs to do, and why the handoff is happening
+- Reassignment comments must explain what was done, what the next role needs to do, and why the handoff is happening
 
 ## Heartbeat Counter
 
@@ -131,7 +131,7 @@ The counter is **derived from Linear comments**, not stored locally:
 The footer line connects the comment to its context:
 
 - `ScottClip` — identifies this as an agent comment
-- `persona-name` — which persona produced this work
+- `role-name` — which role produced this work
 - `[WOT-XX](link)` — link to the issue
 - `from [Heartbeat #N-1](link)` — link to previous heartbeat comment (omit on first heartbeat)
 
