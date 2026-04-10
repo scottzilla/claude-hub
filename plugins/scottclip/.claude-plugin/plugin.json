@@ -1,6 +1,6 @@
 {
   "name": "scottclip",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Linear-backed agent orchestration with role-based task routing for Claude Code",
   "author": {
     "name": "Scott Nowicki"

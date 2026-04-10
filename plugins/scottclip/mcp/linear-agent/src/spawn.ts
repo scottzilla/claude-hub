@@ -1,10 +1,7 @@
-import { spawn } from "node:child_process";
-import { writeFile, mkdir, unlink, readFile } from "node:fs/promises";
-import { createWriteStream, readFileSync } from "node:fs";
+import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import { gql } from "./graphql.js";
-
-const CLAUDE_BIN = process.env.CLAUDE_BIN || "claude";
 
 const ACK_MUTATION = `
   mutation AckSession($input: AgentActivityCreateInput!) {
@@ -210,7 +207,7 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
   const issueIdentifier = (webhookIssue?.identifier || session?.issueIdentifier || "unknown") as string;
   const sessionId = (session?.id || "unknown") as string;
 
-  // Fetch full issue with labels before spawning (saves LLM tokens)
+  // Fetch full issue with labels before spawning
   let fetchedIssue: IssueData | null = null;
   if (issueId) {
     console.log(`Fetching issue ${issueIdentifier} (${issueId}) before spawn...`);
@@ -221,85 +218,44 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
 
   console.log(`Spawning Claude for ${issueIdentifier} (session ${sessionId})`);
 
-  // Write prompt to file (avoids shell escaping issues with multi-line prompts)
+  // Ack session immediately
+  await ackSession(sessionId);
+
+  // Write prompt to file for logging
   const sessionsDir = join(targetRepo, ".scottclip", "sessions");
   await mkdir(sessionsDir, { recursive: true });
-  const promptPath = join(sessionsDir, `${sessionId}.prompt`);
   const logPath = join(sessionsDir, `${sessionId}.log`);
-  await writeFile(promptPath, prompt);
 
-  // Create log file write stream
-  const logStream = createWriteStream(logPath);
-
-  // Spawn with pipe for stdout so we can read it
-  const child = spawn(CLAUDE_BIN, [
-    "-p",
-    "--agent", "orchestrator",
-    "--output-format", "stream-json",
-    "--verbose",
-  ], {
-    cwd: targetRepo,
-    stdio: ["pipe", "pipe", "pipe"],
-    detached: true,
-    env: { ...process.env },
-  });
-
-  // Feed prompt via stdin
-  const promptContent = readFileSync(promptPath, "utf-8");
-  child.stdin?.write(promptContent);
-  child.stdin?.end();
-
-  // Write session PID file so stop handler can kill the process
-  const sessionFile = join(sessionsDir, `${sessionId}.pid`);
-  await writeFile(sessionFile, String(child.pid));
-  console.log(`Session file written: ${sessionFile} (PID ${child.pid})`);
-
-  // Parse stream-json lines and post ephemeral activities to Linear
-  // Without --include-partial-messages, events are complete turns:
-  //   assistant — full message with content array (text + tool_use blocks)
-  //   result    — final answer string
-  let lastCapturedResult = "";
+  // Track activity debounce
   let lastTextPostTime = 0;
-  let lineBuffer = "";
   const TEXT_DEBOUNCE_MS = 3000;
 
-  child.stdout?.on("data", (chunk: Buffer) => {
-    const raw = chunk.toString();
-    logStream.write(raw);
-    lineBuffer += raw;
+  try {
+    let finalResult = "";
 
-    // Process all complete newline-delimited JSON lines
-    const lines = lineBuffer.split("\n");
-    // Last element may be an incomplete line — keep it in the buffer
-    lineBuffer = lines.pop() ?? "";
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-
-      // Silently skip non-JSON lines (e.g. ANSI diagnostics)
-      let ev: Record<string, unknown>;
-      try {
-        ev = JSON.parse(trimmed) as Record<string, unknown>;
-      } catch {
-        continue;
-      }
-
-      const type = ev.type as string | undefined;
+    for await (const message of query({
+      prompt,
+      options: {
+        cwd: targetRepo,
+        allowedTools: ["mcp__linear-agent*", "Read", "Write", "Edit", "Bash", "Grep", "Glob", "Agent"],
+        permissionMode: "bypassPermissions",
+        settingSources: ["project"],
+      },
+    } as any)) {
+      const msg = message as Record<string, unknown>;
+      const type = msg.type as string;
 
       if (type === "assistant") {
-        // Complete assistant turn — walk content blocks
-        const message = ev.message as Record<string, unknown> | undefined;
-        const content = message?.content as Array<Record<string, unknown>> | undefined;
+        // Post ephemeral activities for assistant turns
+        const content = (msg.message as any)?.content as Array<Record<string, unknown>> | undefined;
         if (!Array.isArray(content)) continue;
 
         for (const block of content) {
           if (block.type === "text" && typeof block.text === "string" && block.text.trim()) {
-            // Debounce ephemeral thought posts for rapid successive turns
             const now = Date.now();
             if (now - lastTextPostTime >= TEXT_DEBOUNCE_MS) {
               lastTextPostTime = now;
-              ackSession(sessionId, block.text.trim()).catch((err) =>
+              ackSession(sessionId, block.text.trim()).catch((err: Error) =>
                 console.error("Failed to post text activity:", err),
               );
             }
@@ -309,74 +265,35 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
             gql(ACK_MUTATION, {
               input: {
                 agentSessionId: sessionId,
-                content: { type: "action", action: block.name as string, parameter: param },
+                content: { type: "action", action: block.name, parameter: param },
                 ephemeral: true,
               },
-            }).catch((err) => console.error("Failed to post tool activity:", err));
+            }).catch((err: Error) => console.error("Failed to post tool activity:", err));
           }
         }
       } else if (type === "result") {
-        // Final result — capture for use in the exit handler
-        if (typeof ev.result === "string") {
-          lastCapturedResult = ev.result;
+        if (typeof msg.result === "string") {
+          finalResult = msg.result;
         }
       }
     }
-  });
 
-  child.stderr?.on("data", (chunk: Buffer) => {
-    logStream.write(chunk.toString());
-  });
-
-  // On exit, post final response
-  child.on("exit", async (code) => {
-    // Flush any remaining incomplete line into the log
-    if (lineBuffer.trim()) {
-      logStream.write(lineBuffer);
-    }
-    logStream.end();
-
-    // Use the captured result event; fall back to scanning the log file
-    let finalBody = lastCapturedResult.trim();
-    if (!finalBody) {
-      try {
-        const fullLog = await readFile(logPath, "utf-8");
-        for (const line of fullLog.split("\n").reverse()) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          try {
-            const parsed = JSON.parse(trimmed) as Record<string, unknown>;
-            if (parsed.type === "result" && typeof parsed.result === "string") {
-              finalBody = parsed.result.trim();
-              break;
-            }
-          } catch {
-            // not JSON — skip
-          }
-        }
-      } catch (err) {
-        console.error("Failed to read session log:", err);
-      }
-    }
-
-    if (finalBody) {
+    // Post final response
+    if (finalResult.trim()) {
       await gql(ACK_MUTATION, {
         input: {
           agentSessionId: sessionId,
-          content: { type: "response", body: finalBody },
+          content: { type: "response", body: finalResult.trim() },
         },
-      }).catch((err) => console.error("Failed to post final activity:", err));
+      }).catch((err: Error) => console.error("Failed to post final activity:", err));
     }
 
-    // Clean up session files
-    try { await unlink(sessionFile); } catch {}
-    try { await unlink(promptPath); } catch {}
-    console.log(`Session ${sessionId} exited (code ${code})`);
-  });
+    // Write result to log
+    await writeFile(logPath, finalResult || "(no result)");
+    console.log(`Session ${sessionId} completed for ${issueIdentifier}`);
 
-  child.on("error", (err) => {
-    console.error(`Failed to spawn Claude for ${issueIdentifier}:`, err);
-  });
-
-  child.unref();
+  } catch (err) {
+    console.error(`Session ${sessionId} failed for ${issueIdentifier}:`, err);
+    await writeFile(logPath, `Error: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
