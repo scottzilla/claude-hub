@@ -42,7 +42,7 @@ The persona-worker returns a structured summary including `Final state`. Check t
 | Return state | Outcome |
 |-------------|---------|
 | `Done` | **Done** — log and move on |
-| `In Review` | **Done** — human reviewing, do not re-dispatch |
+| `In Review` | **Check for reassignment** — may be human review OR another persona reviewing. Check comment + labels before deciding |
 | `Blocked` | **Blocked** — escalate to Board |
 | `Reassigned` | **Reassigned** — extract target role, spawn next persona |
 | `In Progress` | **Ambiguous** — sub-agent may have hit turn limit without finishing |
@@ -69,7 +69,8 @@ Re-fetch issue via `mcp__linear-agent__linear_get_issue`. Compare current labels
 
 | Outcome | How to detect | Action |
 |---------|--------------|--------|
-| **Done** | Return state = Done or In Review | Log, exit loop for this issue |
+| **Done** | Return state = Done, AND no reassignment signal in comments/labels | Log, exit loop for this issue |
+| **In Review (check)** | Return state = In Review | Check comment + labels: if reassignment signal found → treat as Reassigned; if label unchanged and no handoff comment → exit loop (human/external review) |
 | **Reassigned** | Return state = Reassigned, OR comment contains `Reassigned →` | Extract target role, fix label if needed, spawn next persona |
 | **Blocked** | Return state = Blocked, OR issue state = Blocked | Escalate to Board, exit loop |
 | **Ambiguous** | Return state = In Progress, no reassignment signal | Read latest comment + issue context, decide: if work seems incomplete and a handoff is implied, treat as reassignment; otherwise, leave issue in current state for next heartbeat |
@@ -183,7 +184,8 @@ For each completed sub-agent, run the reassignment loop. Read `${CLAUDE_PLUGIN_R
 1. **Read the sub-agent's return value.** Extract `Final state` from the structured summary.
 
 2. **Classify the outcome:**
-   - `Done` or `In Review` → **exit loop** for this issue. Log result.
+   - `Done` → **exit loop** for this issue. Log result.
+   - `In Review` → re-fetch issue comments and labels. If reassignment signal found (comment contains `Reassigned →` or label changed to different persona), treat as Reassigned → continue to step 3. Otherwise **exit loop** (external/human review).
    - `Blocked` → **exit loop**. Verify issue is in Blocked state. Log result.
    - `Reassigned` → continue to step 3.
    - `In Progress` (ambiguous) → re-fetch issue comments. If latest ScottClip comment contains `Reassigned →`, treat as Reassigned. Otherwise, **exit loop** — leave issue for next heartbeat.

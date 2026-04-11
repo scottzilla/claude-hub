@@ -37,6 +37,7 @@ Detection priority: comment signal > label change > result text > orchestrator i
 | Outcome | Condition | Action |
 |---------|-----------|--------|
 | **Done** | Issue state = Done, no reassignment signal | Log, move on |
+| **In Review** | Issue state = In Review | Check comment + labels for reassignment signal. If found → Reassigned. If not → exit (external/human review) |
 | **Reassigned** | Reassignment comment or label change to different persona | Spawn next persona worker |
 | **Blocked** | Issue state = Blocked or explicit block signal in comment | Escalate to Board |
 | **Ambiguous** | No clear signal, issue still in progress | Orchestrator interprets and decides (reassign or escalate) |
