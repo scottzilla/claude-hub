@@ -103,7 +103,9 @@ After triage, dispatch work to persona sub-agents. Do not do persona work yourse
 
 1. Resolve persona label → `.scottclip/personas/{persona_name}/`
 2. Read `config.yaml` from that directory → extract `runtime.model`, `runtime.thinking_effort`
-3. Spawn `persona-worker` sub-agent:
+3. Record the current persona label as `original_persona` (needed for reassignment detection)
+4. Initialize `hop_count = 0` for this issue
+5. Spawn `persona-worker` sub-agent:
    - `subagent_type`: `"persona-worker"`
    - `model`: from persona config
    - `isolation`: `"worktree"`
@@ -113,9 +115,44 @@ After triage, dispatch work to persona sub-agents. Do not do persona work yourse
 
 Spawn all sub-agents in a single message for concurrent execution. Multiple issues with the same persona label spawn multiple sub-agents.
 
-### After all sub-agents return
+> **Note:** The reassignment loop below runs per-issue AFTER the initial parallel dispatch completes. Each issue's loop is independent.
 
-1. Check results for escalations (Blocked, Reassigned)
+### After each sub-agent returns — Reassignment Loop
+
+For each completed sub-agent, run the reassignment loop. Read `${CLAUDE_PLUGIN_ROOT}/references/reassignment-detection.md` for detection heuristics.
+
+**Loop procedure:**
+
+1. **Read the sub-agent's return value.** Extract `Final state` from the structured summary.
+
+2. **Classify the outcome:**
+   - `Done` → **exit loop** for this issue. Log result.
+   - `In Review` → re-fetch issue comments and labels. If reassignment signal found (comment contains `Reassigned →` or label changed to different persona), treat as Reassigned → continue to step 3. Otherwise **exit loop** (external/human review).
+   - `Blocked` → **exit loop**. Verify issue is in Blocked state. Log result.
+   - `Reassigned` → continue to step 3.
+   - `In Progress` (ambiguous) → re-fetch issue comments. If latest ScottClip comment contains `Reassigned →`, treat as Reassigned. Otherwise, **exit loop** — leave issue for next heartbeat.
+
+3. **Check hop count.** Increment `hop_count` by 1.
+   - If `hop_count >= 3`: escalation. Post comment on the issue:
+     ```
+     ⚠️ Issue reassigned 3 times in one dispatch cycle. This may indicate unclear ownership or scope. Escalating to Board.
+     ```
+     Move issue to Blocked state. @-mention Board user (from `config.yaml` → `linear.user_name`). **Exit loop.**
+
+4. **Extract target role.** Parse the latest ScottClip comment for `Reassigned → {role-name}`. If no comment signal, check if label changed from `original_persona`.
+
+5. **Validate target role.** Check that the target role exists in `.scottclip/config.yaml` → `roles.labels`.
+   - If not found: post comment `⚠️ Reassignment target "{role-name}" not found in config. Escalating.` Move to Blocked. @-mention Board user. **Exit loop.**
+
+6. **Fix label if needed.** Re-fetch issue labels. If the persona label does not match the target role, do a read-modify-write: remove old persona label, add target role label, save full set via `mcp__linear-agent__linear_save_issue`.
+
+7. **Spawn next persona-worker.** Resolve the new persona directory, read its `config.yaml`, and spawn a new `persona-worker` sub-agent (same parameters as initial dispatch, but with updated persona).
+
+8. **Wait for completion.** When the sub-agent returns, **loop back to step 1.**
+
+### After all issues complete
+
+1. Check results for any remaining escalations
 2. Log aggregate heartbeat to `.scottclip/heartbeat-log.jsonl`
 3. Release lockfile
 
