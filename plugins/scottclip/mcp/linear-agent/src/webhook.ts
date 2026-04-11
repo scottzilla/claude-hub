@@ -60,6 +60,12 @@ export function createWebhookRoute(): Hono {
 
         const sessionId = sessionData.id as string;
 
+        // Debug: log creator info to diagnose self-triggering
+        const creatorDebug = sessionData.creator as Record<string, unknown> | undefined;
+        if (creatorDebug) {
+          console.log(`Session ${sessionId} creator: ${JSON.stringify({ id: creatorDebug.id, name: creatorDebug.name, isBot: creatorDebug.isBot, type: creatorDebug.type })}`);
+        }
+
         // Stop signal first — don't do any other work
         const signal = event.agentActivity?.signal;
         if (signal === "stop") {
@@ -85,6 +91,14 @@ export function createWebhookRoute(): Hono {
         const issueTeamId = sessionData.issue?.teamId || sessionData.issue?.team?.id;
         if (configuredTeamId && issueTeamId && issueTeamId !== configuredTeamId) {
           console.log(`Ignoring event for team ${issueTeamId} (configured: ${configuredTeamId})`);
+          return response;
+        }
+
+        // Skip events triggered by the bot itself (prevents comment → session → comment loop)
+        const creator = sessionData.creator as Record<string, unknown> | undefined;
+        const creatorIsBot = creator?.isBot === true || creator?.type === "application";
+        if (creatorIsBot) {
+          console.log(`Ignoring bot-triggered session ${sessionId} (creator: ${JSON.stringify({ id: creator?.id, name: creator?.name, type: creator?.type })})`);
           return response;
         }
 
