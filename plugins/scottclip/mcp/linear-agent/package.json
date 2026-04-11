@@ -1,6 +1,6 @@
 {
   "name": "linear-agent",
-  "version": "0.1.2",
+  "version": "1.2.0",
   "type": "module",
   "bin": {
     "linear-agent": "./dist/server.js"
