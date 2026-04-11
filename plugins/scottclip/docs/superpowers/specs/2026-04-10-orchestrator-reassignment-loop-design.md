@@ -36,7 +36,7 @@ Detection priority: comment signal > label change > result text > orchestrator i
 
 | Outcome | Condition | Action |
 |---------|-----------|--------|
-| **Done** | Issue state = Done or In Review, no reassignment signal | Log, move on |
+| **Done** | Issue state = Done, no reassignment signal | Log, move on |
 | **Reassigned** | Reassignment comment or label change to different persona | Spawn next persona worker |
 | **Blocked** | Issue state = Blocked or explicit block signal in comment | Escalate to Board |
 | **Ambiguous** | No clear signal, issue still in progress | Orchestrator interprets and decides (reassign or escalate) |
@@ -137,6 +137,7 @@ Move detailed detection heuristics and examples out of `orchestrator.md` to keep
 | Sub-agent reassigns to same role | Counts as a hop. If it happens 3x, escalates (prevents infinite self-loops) |
 | Multiple issues in same dispatch cycle | Each issue has independent hop counter |
 | Sub-agent moves issue to Done but also changes label | Done state takes precedence — no reassignment |
+| Issue state = In Review | Not terminal — treat as still active, check for reassignment signals |
 | Issue state externally changed during sub-agent run | Orchestrator re-fetches, trusts current Linear state |
 
 ---
