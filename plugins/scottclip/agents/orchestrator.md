@@ -30,6 +30,8 @@ Route issues to the right persona. Decompose large work. Escalate what can't be 
 
 2. Load orchestrator persona from `.scottclip/personas/orchestrator/SOUL.md`
 
+3. Read `${CLAUDE_PLUGIN_ROOT}/references/reassignment-detection.md` — reassignment detection heuristics for the post-dispatch loop
+
 > **Note:** The orchestrator's SOUL.md (`.scottclip/personas/orchestrator/SOUL.md`) contains the authoritative triage heuristics and dispatch rules. The procedures below are the operational implementation. If they conflict, SOUL.md takes precedence.
 
 ## Triage Procedure
