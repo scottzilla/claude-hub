@@ -69,6 +69,41 @@ export function classifyIssueEvent(event: Record<string, unknown>): IssueEventAc
   return "skip";
 }
 
+export interface DebouncedHeartbeat {
+  queue(eventId: string): void;
+  setRunning(running: boolean): void;
+}
+
+export function createDebouncedHeartbeat(
+  quietWindowS: number,
+  onFire: (eventCount: number) => void,
+): DebouncedHeartbeat {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let eventCount = 0;
+  let running = false;
+
+  return {
+    queue(eventId: string) {
+      if (running) {
+        console.log(`Debounce: skipping (heartbeat running), event ${eventId}`);
+        return;
+      }
+      eventCount++;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        const count = eventCount;
+        eventCount = 0;
+        timer = null;
+        onFire(count);
+      }, quietWindowS * 1000);
+      console.log(`Debounce: queued event ${eventId} (${eventCount} pending, ${quietWindowS}s window)`);
+    },
+    setRunning(r: boolean) {
+      running = r;
+    },
+  };
+}
+
 export function verifySignature(
   body: string,
   signature: string | null,
@@ -88,6 +123,28 @@ export function verifySignature(
 
 export function createWebhookRoute(): Hono {
   const app = new Hono();
+
+  // Auto-react debounce — fires heartbeat after quiet window
+  const debouncer = createDebouncedHeartbeat(
+    getAutoReactConfig().quietWindowS,
+    (eventCount) => {
+      console.log(`Auto-react: firing heartbeat (${eventCount} events in window)`);
+      debouncer.setRunning(true);
+      const syntheticEvent: Record<string, unknown> = {
+        type: "AutoReactHeartbeat",
+        action: "created",
+        data: {
+          id: `auto-react-${Date.now()}`,
+          issueIdentifier: "heartbeat",
+        },
+        guidance: "Auto-react triggered by Issue webhook events. Run a heartbeat cycle: pick up issues from the inbox, triage unlabeled ones, dispatch to personas.",
+        promptContext: `Triggered by ${eventCount} Issue event(s).`,
+      };
+      spawnClaudeSession(syntheticEvent)
+        .catch((err) => console.error("Auto-react spawn error:", err))
+        .finally(() => debouncer.setRunning(false));
+    },
+  );
 
   app.post("/", async (c) => {
     const secret = process.env.LINEAR_WEBHOOK_SECRET;
@@ -172,6 +229,26 @@ export function createWebhookRoute(): Hono {
           }
 
           spawnClaudeSession(event).catch((err) => console.error("Spawn error:", err));
+        }
+      }
+
+      // --- Issue event handler (auto_react) ---
+      if (event.type === "Issue") {
+        const config = getAutoReactConfig();
+        if (config.autoReact) {
+          // Team filter
+          const configuredTeamId = getConfiguredTeamId();
+          const issueTeamId = (event.data as Record<string, unknown>)?.teamId as string | undefined;
+          if (configuredTeamId && issueTeamId && issueTeamId !== configuredTeamId) {
+            console.log(`Auto-react: ignoring Issue event for team ${issueTeamId}`);
+            return response;
+          }
+
+          const classification = classifyIssueEvent(event);
+          if (classification !== "skip") {
+            console.log(`Auto-react: ${classification} event, queuing heartbeat`);
+            debouncer.queue(`${event.action}-${(event.data as Record<string, unknown>)?.id || "unknown"}`);
+          }
         }
       }
 

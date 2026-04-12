@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { verifySignature, getAutoReactConfig, classifyIssueEvent } from "../webhook.js";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { verifySignature, getAutoReactConfig, classifyIssueEvent, createDebouncedHeartbeat } from "../webhook.js";
 import { createHmac } from "node:crypto";
 
 describe("verifySignature", () => {
@@ -124,5 +124,52 @@ describe("classifyIssueEvent", () => {
       data: { id: "issue-1", teamId: "team-1" },
     };
     expect(classifyIssueEvent(event)).toBe("create");
+  });
+});
+
+describe("createDebouncedHeartbeat", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("fires callback after quiet window", () => {
+    const callback = vi.fn();
+    const debounce = createDebouncedHeartbeat(5, callback);
+
+    debounce.queue("event-1");
+    expect(callback).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(5000);
+    expect(callback).toHaveBeenCalledOnce();
+    expect(callback).toHaveBeenCalledWith(1);
+  });
+
+  it("resets timer on subsequent events", () => {
+    const callback = vi.fn();
+    const debounce = createDebouncedHeartbeat(5, callback);
+
+    debounce.queue("event-1");
+    vi.advanceTimersByTime(3000);
+    debounce.queue("event-2");
+    vi.advanceTimersByTime(3000);
+    expect(callback).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(2000);
+    expect(callback).toHaveBeenCalledOnce();
+    expect(callback).toHaveBeenCalledWith(2);
+  });
+
+  it("skips if heartbeat already running", () => {
+    const callback = vi.fn();
+    const debounce = createDebouncedHeartbeat(5, callback);
+
+    debounce.setRunning(true);
+    debounce.queue("event-1");
+    vi.advanceTimersByTime(5000);
+    expect(callback).not.toHaveBeenCalled();
   });
 });
