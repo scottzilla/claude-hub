@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { verifySignature } from "../webhook.js";
+import { verifySignature, getAutoReactConfig } from "../webhook.js";
 import { createHmac } from "node:crypto";
 
 describe("verifySignature", () => {
@@ -30,5 +30,24 @@ describe("verifySignature", () => {
     const signature = "anything";
 
     expect(verifySignature(body, signature, undefined)).toBe(false);
+  });
+});
+
+describe("getAutoReactConfig", () => {
+  it("returns defaults when config has no monitor section", () => {
+    const config = getAutoReactConfig("version: 2\nlinear:\n  team: test\n");
+    expect(config).toEqual({ autoReact: false, quietWindowS: 30 });
+  });
+
+  it("reads auto_react and quiet_window_s from config", () => {
+    const config = getAutoReactConfig(
+      "version: 2\nmonitor:\n  auto_react: true\n  quiet_window_s: 15\n"
+    );
+    expect(config).toEqual({ autoReact: true, quietWindowS: 15 });
+  });
+
+  it("returns defaults for partial config", () => {
+    const config = getAutoReactConfig("version: 2\nmonitor:\n  auto_react: true\n");
+    expect(config).toEqual({ autoReact: true, quietWindowS: 30 });
   });
 });

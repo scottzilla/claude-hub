@@ -5,15 +5,39 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ackSession, spawnClaudeSession, moveIssueToState } from "./spawn.js";
 
-function getConfiguredTeamId(): string | null {
+function readConfigRaw(): string | null {
   const agentCwd = process.env.AGENT_CWD || process.cwd();
   try {
-    const raw = readFileSync(join(agentCwd, ".scottclip", "config.yaml"), "utf-8");
-    const match = raw.match(/^\s*team_id:\s*"?([^"\n]+)"?/m);
-    return match ? match[1].trim() : null;
+    return readFileSync(join(agentCwd, ".scottclip", "config.yaml"), "utf-8");
   } catch {
     return null;
   }
+}
+
+function getConfiguredTeamId(): string | null {
+  const raw = readConfigRaw();
+  if (!raw) return null;
+  const match = raw.match(/^\s*team_id:\s*"?([^"\n]+)"?/m);
+  return match ? match[1].trim() : null;
+}
+
+export interface AutoReactConfig {
+  autoReact: boolean;
+  quietWindowS: number;
+}
+
+export function getAutoReactConfig(raw?: string): AutoReactConfig {
+  const defaults: AutoReactConfig = { autoReact: false, quietWindowS: 30 };
+  const content = raw ?? readConfigRaw();
+  if (!content) return defaults;
+
+  const autoReactMatch = content.match(/^\s*auto_react:\s*(true|false)/m);
+  const quietWindowMatch = content.match(/^\s*quiet_window_s:\s*(\d+)/m);
+
+  return {
+    autoReact: autoReactMatch ? autoReactMatch[1] === "true" : defaults.autoReact,
+    quietWindowS: quietWindowMatch ? parseInt(quietWindowMatch[1], 10) : defaults.quietWindowS,
+  };
 }
 
 export function verifySignature(
