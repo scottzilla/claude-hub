@@ -40,6 +40,35 @@ export function getAutoReactConfig(raw?: string): AutoReactConfig {
   };
 }
 
+export type IssueEventAction = "create" | "label_change" | "state_to_todo" | "skip";
+
+export function classifyIssueEvent(event: Record<string, unknown>): IssueEventAction {
+  const actor = event.actor as Record<string, unknown> | undefined;
+  const action = event.action as string;
+  const data = event.data as Record<string, unknown> | undefined;
+  const updatedFrom = event.updatedFrom as Record<string, unknown> | undefined;
+
+  // Bot guard — skip events from apps/agents
+  if (actor?.type === "app") return "skip";
+
+  // Issue created by human
+  if (action === "create") return "create";
+
+  // Issue updated — check what changed
+  if (action === "update" && updatedFrom) {
+    // Label changed
+    if ("labelIds" in updatedFrom) return "label_change";
+
+    // State changed to Todo
+    if ("stateId" in updatedFrom) {
+      const state = (data?.state as Record<string, unknown>)?.name;
+      if (state === "Todo") return "state_to_todo";
+    }
+  }
+
+  return "skip";
+}
+
 export function verifySignature(
   body: string,
   signature: string | null,

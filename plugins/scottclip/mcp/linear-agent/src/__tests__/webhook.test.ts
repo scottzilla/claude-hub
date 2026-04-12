@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { verifySignature, getAutoReactConfig } from "../webhook.js";
+import { verifySignature, getAutoReactConfig, classifyIssueEvent } from "../webhook.js";
 import { createHmac } from "node:crypto";
 
 describe("verifySignature", () => {
@@ -49,5 +49,80 @@ describe("getAutoReactConfig", () => {
   it("returns defaults for partial config", () => {
     const config = getAutoReactConfig("version: 2\nmonitor:\n  auto_react: true\n");
     expect(config).toEqual({ autoReact: true, quietWindowS: 30 });
+  });
+});
+
+describe("classifyIssueEvent", () => {
+  it("returns 'create' for human-created issue", () => {
+    const event = {
+      type: "Issue",
+      action: "create",
+      actor: { type: "user", name: "Scott" },
+      data: { id: "issue-1", teamId: "team-1" },
+    };
+    expect(classifyIssueEvent(event)).toBe("create");
+  });
+
+  it("returns 'skip' for bot-created issue", () => {
+    const event = {
+      type: "Issue",
+      action: "create",
+      actor: { type: "app", name: "ScottClip" },
+      data: { id: "issue-1", teamId: "team-1" },
+    };
+    expect(classifyIssueEvent(event)).toBe("skip");
+  });
+
+  it("returns 'label_change' when updatedFrom has labelIds", () => {
+    const event = {
+      type: "Issue",
+      action: "update",
+      actor: { type: "user", name: "Scott" },
+      data: { id: "issue-1", teamId: "team-1" },
+      updatedFrom: { labelIds: ["old-label-id"] },
+    };
+    expect(classifyIssueEvent(event)).toBe("label_change");
+  });
+
+  it("returns 'state_to_todo' when updatedFrom has stateId and new state is Todo", () => {
+    const event = {
+      type: "Issue",
+      action: "update",
+      actor: { type: "user", name: "Scott" },
+      data: { id: "issue-1", teamId: "team-1", state: { name: "Todo" } },
+      updatedFrom: { stateId: "old-state-id" },
+    };
+    expect(classifyIssueEvent(event)).toBe("state_to_todo");
+  });
+
+  it("returns 'skip' for state change not to Todo", () => {
+    const event = {
+      type: "Issue",
+      action: "update",
+      actor: { type: "user", name: "Scott" },
+      data: { id: "issue-1", teamId: "team-1", state: { name: "Done" } },
+      updatedFrom: { stateId: "old-state-id" },
+    };
+    expect(classifyIssueEvent(event)).toBe("skip");
+  });
+
+  it("returns 'skip' for description-only update", () => {
+    const event = {
+      type: "Issue",
+      action: "update",
+      actor: { type: "user", name: "Scott" },
+      data: { id: "issue-1", teamId: "team-1" },
+      updatedFrom: { description: "old description" },
+    };
+    expect(classifyIssueEvent(event)).toBe("skip");
+  });
+
+  it("returns 'create' when no actor field present", () => {
+    const event = {
+      type: "Issue",
+      action: "create",
+      data: { id: "issue-1", teamId: "team-1" },
+    };
+    expect(classifyIssueEvent(event)).toBe("create");
   });
 });
