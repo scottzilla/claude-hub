@@ -11,6 +11,14 @@ const ACK_MUTATION = `
   }
 `;
 
+const UPDATE_SESSION_MUTATION = `
+  mutation UpdateSession($id: String!, $input: AgentSessionUpdateInput!) {
+    agentSessionUpdate(id: $id, input: $input) {
+      success
+    }
+  }
+`;
+
 const GET_ISSUE_QUERY = `
   query GetIssue($id: String!) {
     issue(id: $id) {
@@ -255,7 +263,13 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
             const now = Date.now();
             if (now - lastTextPostTime >= TEXT_DEBOUNCE_MS) {
               lastTextPostTime = now;
-              ackSession(sessionId, block.text.trim()).catch((err: Error) =>
+              gql(ACK_MUTATION, {
+                input: {
+                  agentSessionId: sessionId,
+                  content: { type: "thought", body: block.text.trim() },
+                  ephemeral: false,
+                },
+              }).catch((err: Error) =>
                 console.error("Failed to post text activity:", err),
               );
             }
@@ -288,6 +302,12 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
       }).catch((err: Error) => console.error("Failed to post final activity:", err));
     }
 
+    // Mark session complete
+    await gql(UPDATE_SESSION_MUTATION, {
+      id: sessionId,
+      input: { status: "complete" },
+    }).catch((err: Error) => console.error("Failed to complete session:", err));
+
     // Write result to log
     await writeFile(logPath, finalResult || "(no result)");
     console.log(`Session ${sessionId} completed for ${issueIdentifier}`);
@@ -295,5 +315,11 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
   } catch (err) {
     console.error(`Session ${sessionId} failed for ${issueIdentifier}:`, err);
     await writeFile(logPath, `Error: ${err instanceof Error ? err.message : String(err)}`);
+
+    // Mark session as error
+    await gql(UPDATE_SESSION_MUTATION, {
+      id: sessionId,
+      input: { status: "error" },
+    }).catch((err: Error) => console.error("Failed to mark session error:", err));
   }
 }
