@@ -1,4 +1,4 @@
-# Auto-React Webhook Handler Design
+# Auto-React Webhook Handler + Orchestrator Attachments Design
 
 **Date:** 2026-04-11
 **Status:** Draft
@@ -163,6 +163,36 @@ Test cases:
 
 ## Testing
 
+---
+
+## Bundled Fix: Orchestrator Attachment Passthrough
+
+### Problem
+
+The webhook path (`spawn.ts` → `buildClaudeArgs`) fetches issue attachments and includes them in the agent prompt as `## Attachments` with title/URL. The orchestrator path does not — when the orchestrator spawns persona-workers, it passes issue ID, title, description, and comments but omits attachments.
+
+Workers have `mcp__linear-agent__linear_get_attachment` in their tools list and the `linear-workflow` skill tells them to check attachments, but they aren't explicitly told about attachments in their spawn prompt. This creates an information gap vs webhook-spawned sessions.
+
+### Fix
+
+Modify `agents/orchestrator.md` Dispatch section to include attachments in the persona-worker spawn prompt.
+
+In the "For each ready issue" subsection, after fetching issue details via `mcp__linear-agent__linear_get_issue`, also call `mcp__linear-agent__linear_get_attachment` to retrieve attachments. Include them in the persona-worker spawn prompt:
+
+```
+- Include in prompt: $AGENT_HOME, thinking effort, issue ID, title, description,
+  recent comments, attachments (title + URL for each), agentSessionId
+```
+
+### Changes
+
+- Modify: `agents/orchestrator.md` — Dispatch section step 5, add attachments to spawn prompt
+- No TypeScript changes
+
+---
+
+## Testing
+
 ### Unit tests (vitest)
 
 1. Event classification: verify each event type/action combo is correctly classified
@@ -178,3 +208,4 @@ Test cases:
 3. Move issue from Blocked to Todo → verify heartbeat fires
 4. Have bot/agent create an issue → verify no heartbeat
 5. Rapid-fire 3 label changes → verify single heartbeat after 30s quiet
+6. Orchestrator spawns persona-worker → verify attachments appear in spawn prompt
