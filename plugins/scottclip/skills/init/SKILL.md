@@ -261,6 +261,7 @@ For "full" or "custom", ask the user to name each additional role and its Linear
    - `{{LINEAR_CLIENT_ID}}` → OAuth client ID
    - `{{TEAM}}` → selected team name
    - `{{TEAM_ID}}` → selected team's `id` from the `linear_list_teams` response
+   - `{{AUTO_REACT}}` → `true` or `false` based on user's auto-react choice (see Step 6)
 
 3. Update `config.yaml` roles section to match the selected preset — include only the roles that were scaffolded. Use the `roles:` key (not `personas:`):
    ```yaml
@@ -325,10 +326,19 @@ Ask the user if they want to enable real-time event-driven mode:
      Or use /scottclip-watch to start it.
      ```
 
-  5. Suggest: `/scottclip-watch` to start the server (webhook + polling)
+  5. Ask about auto-react:
+     ```
+     Enable auto-react? When enabled, webhook events automatically trigger a heartbeat
+     so ScottClip responds to new issues without waiting for the next poll cycle. [y/n]
+     ```
+     - **Yes** → set `{{AUTO_REACT}}` to `true`
+     - **No** → set `{{AUTO_REACT}}` to `false`
+
+  6. Suggest: `/scottclip-watch` to start the server (webhook + polling)
 
 - **Not now** →
   Explain they can set up webhooks later. ScottClip works fine with polling-only mode (`/heartbeat` or `/scottclip-watch`).
+  Set `{{AUTO_REACT}}` to `false` (auto-react requires a webhook).
 
 ### Step 7: Offer Watch Mode
 

@@ -37,9 +37,9 @@ heartbeat:
 
 # Monitor: auto-react to webhook events
 # When enabled, Issue create/update webhooks trigger a heartbeat automatically
-# monitor:
-#   auto_react: false      # true = webhook triggers heartbeat on Issue events
-#   quiet_window_s: 30     # debounce: seconds of no events before triggering heartbeat
+monitor:
+  auto_react: {{AUTO_REACT}}      # true = webhook triggers heartbeat on Issue events
+  quiet_window_s: 30     # debounce: seconds of no events before triggering heartbeat
 
 # Linear label configuration
 labels:
