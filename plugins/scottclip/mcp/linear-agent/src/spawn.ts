@@ -11,9 +11,9 @@ const ACK_MUTATION = `
   }
 `;
 
-const UPDATE_SESSION_MUTATION = `
-  mutation UpdateSession($id: String!, $input: AgentSessionUpdateInput!) {
-    agentSessionUpdate(id: $id, input: $input) {
+const COMPLETE_SESSION_MUTATION = `
+  mutation CompleteSession($id: String!) {
+    agentSessionComplete(id: $id) {
       success
     }
   }
@@ -273,6 +273,20 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
                 console.error("Failed to post text activity:", err),
               );
             }
+          } else if (block.type === "thinking" && typeof block.thinking === "string" && block.thinking.trim()) {
+            const now = Date.now();
+            if (now - lastTextPostTime >= TEXT_DEBOUNCE_MS) {
+              lastTextPostTime = now;
+              gql(ACK_MUTATION, {
+                input: {
+                  agentSessionId: sessionId,
+                  content: { type: "thought", body: block.thinking.trim() },
+                  ephemeral: false,
+                },
+              }).catch((err: Error) =>
+                console.error("Failed to post thinking activity:", err),
+              );
+            }
           } else if (block.type === "tool_use" && typeof block.name === "string") {
             const input = block.input as Record<string, unknown> | undefined;
             const param = input ? JSON.stringify(input).slice(0, 500) : "";
@@ -303,9 +317,8 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
     }
 
     // Mark session complete
-    await gql(UPDATE_SESSION_MUTATION, {
+    await gql(COMPLETE_SESSION_MUTATION, {
       id: sessionId,
-      input: { status: "complete" },
     }).catch((err: Error) => console.error("Failed to complete session:", err));
 
     // Write result to log
@@ -316,10 +329,6 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
     console.error(`Session ${sessionId} failed for ${issueIdentifier}:`, err);
     await writeFile(logPath, `Error: ${err instanceof Error ? err.message : String(err)}`);
 
-    // Mark session as error
-    await gql(UPDATE_SESSION_MUTATION, {
-      id: sessionId,
-      input: { status: "error" },
-    }).catch((err: Error) => console.error("Failed to mark session error:", err));
+    // Linear has no agentSessionFailed mutation — error is logged above, session left as-is
   }
 }
