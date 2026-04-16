@@ -29,6 +29,14 @@ const UPDATE_SESSION_MUTATION = `
   }
 `;
 
+const COMPLETE_SESSION_MUTATION = `
+  mutation CompleteSession($id: String!) {
+    agentSessionComplete(id: $id) {
+      success
+    }
+  }
+`;
+
 const CREATE_ACTIVITY_MUTATION = `
   mutation CreateActivity($input: AgentActivityCreateInput!) {
     agentActivityCreate(input: $input) {
@@ -63,10 +71,9 @@ export function registerSessionTools(server: McpServer) {
   server.registerTool(
     "linear_update_session",
     {
-      description: "Update an agent session: status, external URLs, or plan checklist. Plan replaces the entire checklist.",
+      description: "Update an agent session's external URLs or plan checklist. Plan replaces the entire checklist. To complete a session use linear_complete_session instead.",
       inputSchema: {
         sessionId: z.string().describe("Session ID"),
-        status: z.enum(["active", "complete", "error", "awaitingInput", "stale"]).optional().describe("New session status"),
         externalUrls: z.array(z.object({
           label: z.string(),
           url: z.string(),
@@ -84,7 +91,6 @@ export function registerSessionTools(server: McpServer) {
     },
     async (args) => {
       const input: Record<string, unknown> = {};
-      if (args.status) input.status = args.status;
       if (args.externalUrls) input.externalUrls = args.externalUrls;
       if (args.addedExternalUrls) input.addedExternalUrls = args.addedExternalUrls;
       if (args.removedExternalUrls) input.removedExternalUrls = args.removedExternalUrls;
@@ -95,6 +101,23 @@ export function registerSessionTools(server: McpServer) {
       }>(UPDATE_SESSION_MUTATION, { id: args.sessionId, input });
 
       return { content: [{ type: "text" as const, text: JSON.stringify(data.agentSessionUpdate.agentSession, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "linear_complete_session",
+    {
+      description: "Mark an agent session as complete. Call this after successfully finishing all work on an issue.",
+      inputSchema: {
+        sessionId: z.string().describe("Session ID to complete"),
+      },
+    },
+    async (args) => {
+      const data = await gql<{
+        agentSessionComplete: { success: boolean };
+      }>(COMPLETE_SESSION_MUTATION, { id: args.sessionId });
+
+      return { content: [{ type: "text" as const, text: JSON.stringify(data.agentSessionComplete, null, 2) }] };
     },
   );
 

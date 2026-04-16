@@ -5,15 +5,103 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ackSession, spawnClaudeSession, moveIssueToState } from "./spawn.js";
 
-function getConfiguredTeamId(): string | null {
+function readConfigRaw(): string | null {
   const agentCwd = process.env.AGENT_CWD || process.cwd();
   try {
-    const raw = readFileSync(join(agentCwd, ".scottclip", "config.yaml"), "utf-8");
-    const match = raw.match(/^\s*team_id:\s*"?([^"\n]+)"?/m);
-    return match ? match[1].trim() : null;
+    return readFileSync(join(agentCwd, ".scottclip", "config.yaml"), "utf-8");
   } catch {
     return null;
   }
+}
+
+function getConfiguredTeamId(): string | null {
+  const raw = readConfigRaw();
+  if (!raw) return null;
+  const match = raw.match(/^\s*team_id:\s*"?([^"\n]+)"?/m);
+  return match ? match[1].trim() : null;
+}
+
+export interface AutoReactConfig {
+  autoReact: boolean;
+  quietWindowS: number;
+}
+
+export function getAutoReactConfig(raw?: string): AutoReactConfig {
+  const defaults: AutoReactConfig = { autoReact: false, quietWindowS: 30 };
+  const content = raw ?? readConfigRaw();
+  if (!content) return defaults;
+
+  const autoReactMatch = content.match(/^\s*auto_react:\s*(true|false)/m);
+  const quietWindowMatch = content.match(/^\s*quiet_window_s:\s*(\d+)/m);
+
+  return {
+    autoReact: autoReactMatch ? autoReactMatch[1] === "true" : defaults.autoReact,
+    quietWindowS: quietWindowMatch ? parseInt(quietWindowMatch[1], 10) : defaults.quietWindowS,
+  };
+}
+
+export type IssueEventAction = "create" | "label_change" | "state_to_todo" | "skip";
+
+export function classifyIssueEvent(event: Record<string, unknown>): IssueEventAction {
+  const actor = event.actor as Record<string, unknown> | undefined;
+  const action = event.action as string;
+  const data = event.data as Record<string, unknown> | undefined;
+  const updatedFrom = event.updatedFrom as Record<string, unknown> | undefined;
+
+  // Bot guard — skip events from apps/agents
+  if (actor?.type === "app") return "skip";
+
+  // Issue created by human
+  if (action === "create") return "create";
+
+  // Issue updated — check what changed
+  if (action === "update" && updatedFrom) {
+    // Label changed
+    if ("labelIds" in updatedFrom) return "label_change";
+
+    // State changed to Todo
+    if ("stateId" in updatedFrom) {
+      const state = (data?.state as Record<string, unknown>)?.name;
+      if (state === "Todo") return "state_to_todo";
+    }
+  }
+
+  return "skip";
+}
+
+export interface DebouncedHeartbeat {
+  queue(eventId: string): void;
+  setRunning(running: boolean): void;
+}
+
+export function createDebouncedHeartbeat(
+  quietWindowS: number,
+  onFire: (eventCount: number) => void,
+): DebouncedHeartbeat {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let eventCount = 0;
+  let running = false;
+
+  return {
+    queue(eventId: string) {
+      if (running) {
+        console.log(`Debounce: skipping (heartbeat running), event ${eventId}`);
+        return;
+      }
+      eventCount++;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        const count = eventCount;
+        eventCount = 0;
+        timer = null;
+        onFire(count);
+      }, quietWindowS * 1000);
+      console.log(`Debounce: queued event ${eventId} (${eventCount} pending, ${quietWindowS}s window)`);
+    },
+    setRunning(r: boolean) {
+      running = r;
+    },
+  };
 }
 
 export function verifySignature(
@@ -35,6 +123,28 @@ export function verifySignature(
 
 export function createWebhookRoute(): Hono {
   const app = new Hono();
+
+  // Auto-react debounce — fires heartbeat after quiet window
+  const debouncer = createDebouncedHeartbeat(
+    getAutoReactConfig().quietWindowS,
+    (eventCount) => {
+      console.log(`Auto-react: firing heartbeat (${eventCount} events in window)`);
+      debouncer.setRunning(true);
+      const syntheticEvent: Record<string, unknown> = {
+        type: "AutoReactHeartbeat",
+        action: "created",
+        data: {
+          id: `auto-react-${Date.now()}`,
+          issueIdentifier: "heartbeat",
+        },
+        guidance: "Auto-react triggered by Issue webhook events. Run a heartbeat cycle: pick up issues from the inbox, triage unlabeled ones, dispatch to personas.",
+        promptContext: `Triggered by ${eventCount} Issue event(s).`,
+      };
+      spawnClaudeSession(syntheticEvent)
+        .catch((err) => console.error("Auto-react spawn error:", err))
+        .finally(() => debouncer.setRunning(false));
+    },
+  );
 
   app.post("/", async (c) => {
     const secret = process.env.LINEAR_WEBHOOK_SECRET;
@@ -119,6 +229,26 @@ export function createWebhookRoute(): Hono {
           }
 
           spawnClaudeSession(event).catch((err) => console.error("Spawn error:", err));
+        }
+      }
+
+      // --- Issue event handler (auto_react) ---
+      if (event.type === "Issue") {
+        const config = getAutoReactConfig();
+        if (config.autoReact) {
+          // Team filter
+          const configuredTeamId = getConfiguredTeamId();
+          const issueTeamId = (event.data as Record<string, unknown>)?.teamId as string | undefined;
+          if (configuredTeamId && issueTeamId && issueTeamId !== configuredTeamId) {
+            console.log(`Auto-react: ignoring Issue event for team ${issueTeamId}`);
+            return response;
+          }
+
+          const classification = classifyIssueEvent(event);
+          if (classification !== "skip") {
+            console.log(`Auto-react: ${classification} event, queuing heartbeat`);
+            debouncer.queue(`${event.action}-${(event.data as Record<string, unknown>)?.id || "unknown"}`);
+          }
         }
       }
 

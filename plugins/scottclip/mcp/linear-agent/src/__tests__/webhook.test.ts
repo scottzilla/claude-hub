@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { verifySignature } from "../webhook.js";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { verifySignature, getAutoReactConfig, classifyIssueEvent, createDebouncedHeartbeat } from "../webhook.js";
 import { createHmac } from "node:crypto";
 
 describe("verifySignature", () => {
@@ -30,5 +30,146 @@ describe("verifySignature", () => {
     const signature = "anything";
 
     expect(verifySignature(body, signature, undefined)).toBe(false);
+  });
+});
+
+describe("getAutoReactConfig", () => {
+  it("returns defaults when config has no monitor section", () => {
+    const config = getAutoReactConfig("version: 2\nlinear:\n  team: test\n");
+    expect(config).toEqual({ autoReact: false, quietWindowS: 30 });
+  });
+
+  it("reads auto_react and quiet_window_s from config", () => {
+    const config = getAutoReactConfig(
+      "version: 2\nmonitor:\n  auto_react: true\n  quiet_window_s: 15\n"
+    );
+    expect(config).toEqual({ autoReact: true, quietWindowS: 15 });
+  });
+
+  it("returns defaults for partial config", () => {
+    const config = getAutoReactConfig("version: 2\nmonitor:\n  auto_react: true\n");
+    expect(config).toEqual({ autoReact: true, quietWindowS: 30 });
+  });
+});
+
+describe("classifyIssueEvent", () => {
+  it("returns 'create' for human-created issue", () => {
+    const event = {
+      type: "Issue",
+      action: "create",
+      actor: { type: "user", name: "Scott" },
+      data: { id: "issue-1", teamId: "team-1" },
+    };
+    expect(classifyIssueEvent(event)).toBe("create");
+  });
+
+  it("returns 'skip' for bot-created issue", () => {
+    const event = {
+      type: "Issue",
+      action: "create",
+      actor: { type: "app", name: "ScottClip" },
+      data: { id: "issue-1", teamId: "team-1" },
+    };
+    expect(classifyIssueEvent(event)).toBe("skip");
+  });
+
+  it("returns 'label_change' when updatedFrom has labelIds", () => {
+    const event = {
+      type: "Issue",
+      action: "update",
+      actor: { type: "user", name: "Scott" },
+      data: { id: "issue-1", teamId: "team-1" },
+      updatedFrom: { labelIds: ["old-label-id"] },
+    };
+    expect(classifyIssueEvent(event)).toBe("label_change");
+  });
+
+  it("returns 'state_to_todo' when updatedFrom has stateId and new state is Todo", () => {
+    const event = {
+      type: "Issue",
+      action: "update",
+      actor: { type: "user", name: "Scott" },
+      data: { id: "issue-1", teamId: "team-1", state: { name: "Todo" } },
+      updatedFrom: { stateId: "old-state-id" },
+    };
+    expect(classifyIssueEvent(event)).toBe("state_to_todo");
+  });
+
+  it("returns 'skip' for state change not to Todo", () => {
+    const event = {
+      type: "Issue",
+      action: "update",
+      actor: { type: "user", name: "Scott" },
+      data: { id: "issue-1", teamId: "team-1", state: { name: "Done" } },
+      updatedFrom: { stateId: "old-state-id" },
+    };
+    expect(classifyIssueEvent(event)).toBe("skip");
+  });
+
+  it("returns 'skip' for description-only update", () => {
+    const event = {
+      type: "Issue",
+      action: "update",
+      actor: { type: "user", name: "Scott" },
+      data: { id: "issue-1", teamId: "team-1" },
+      updatedFrom: { description: "old description" },
+    };
+    expect(classifyIssueEvent(event)).toBe("skip");
+  });
+
+  it("returns 'create' when no actor field present", () => {
+    const event = {
+      type: "Issue",
+      action: "create",
+      data: { id: "issue-1", teamId: "team-1" },
+    };
+    expect(classifyIssueEvent(event)).toBe("create");
+  });
+});
+
+describe("createDebouncedHeartbeat", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("fires callback after quiet window", () => {
+    const callback = vi.fn();
+    const debounce = createDebouncedHeartbeat(5, callback);
+
+    debounce.queue("event-1");
+    expect(callback).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(5000);
+    expect(callback).toHaveBeenCalledOnce();
+    expect(callback).toHaveBeenCalledWith(1);
+  });
+
+  it("resets timer on subsequent events", () => {
+    const callback = vi.fn();
+    const debounce = createDebouncedHeartbeat(5, callback);
+
+    debounce.queue("event-1");
+    vi.advanceTimersByTime(3000);
+    debounce.queue("event-2");
+    vi.advanceTimersByTime(3000);
+    expect(callback).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(2000);
+    expect(callback).toHaveBeenCalledOnce();
+    expect(callback).toHaveBeenCalledWith(2);
+  });
+
+  it("skips if heartbeat already running", () => {
+    const callback = vi.fn();
+    const debounce = createDebouncedHeartbeat(5, callback);
+
+    debounce.setRunning(true);
+    debounce.queue("event-1");
+    vi.advanceTimersByTime(5000);
+    expect(callback).not.toHaveBeenCalled();
   });
 });

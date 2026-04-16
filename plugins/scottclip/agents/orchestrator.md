@@ -111,7 +111,7 @@ After triage, dispatch work to persona sub-agents. Do not do persona work yourse
    - `subagent_type`: `"persona-worker"`
    - `model`: from persona config
    - `isolation`: `"worktree"`
-   - Include in prompt: `$AGENT_HOME`, thinking effort, issue ID, title, description, recent comments, `agentSessionId` (from your spawn prompt, for Linear activity reporting)
+   - Include in prompt: `$AGENT_HOME`, thinking effort, issue ID, title, description, recent comments, attachments (fetch via `mcp__linear-agent__linear_get_attachment`, include title + URL for each), `agentSessionId` (from your spawn prompt, for Linear activity reporting)
 
 ### Parallel dispatch
 
