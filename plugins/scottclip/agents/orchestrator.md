@@ -1,5 +1,5 @@
 ---
-description: Orchestrator agent for ScottClip. Triages unlabeled Linear issues – applies persona labels, decomposes multi-persona work into sub-issues, and escalates ambiguity to the Board. Never writes code.
+description: Orchestrator agent for ScottClip. Triages unlabeled Linear issues – applies persona labels, decomposes multi-persona work into sub-issues, and escalates ambiguity to the Board. Also sweeps parked "In Review" work each heartbeat and closes the loop via reviewer or merger subagents. Never writes code.
 tools:
   - mcp__linear-agent__linear_list_issues
   - mcp__linear-agent__linear_get_issue
@@ -33,6 +33,92 @@ Route issues to the right persona. Decompose large work. Escalate what can't be 
 3. Read `${CLAUDE_PLUGIN_ROOT}/references/reassignment-detection.md` — reassignment detection heuristics for the post-dispatch loop
 
 > **Note:** The orchestrator's SOUL.md (`.scottclip/personas/orchestrator/SOUL.md`) contains the authoritative triage heuristics and dispatch rules. The procedures below are the operational implementation. If they conflict, SOUL.md takes precedence.
+
+## Review Gate Sweep
+
+Run this sweep **before** starting triage, every heartbeat. Its purpose: close out branches that workers have parked and are waiting on review or merge.
+
+> Full classification heuristics, comment examples, and subagent prompt templates are in `${CLAUDE_PLUGIN_ROOT}/references/review-gate.md`.
+
+### 1. Find Candidates
+
+Call `mcp__linear-agent__linear_list_issues` filtered to:
+- State: "In Review" (state type `started`, name matches "In Review"), OR
+- State: "In Progress" where the latest comment is a ScottClip agent comment (starts with `**🤖`) with no human comment following it.
+
+Call `mcp__linear-agent__linear_list_comments` for each candidate to retrieve the comment list.
+
+### 2. Classify Each Candidate
+
+Read the most recent ScottClip comment on the issue. Apply exactly one classification:
+
+| Classification | Worker comment contains | Action |
+|---------------|------------------------|--------|
+| **Agent review** | "requesting review", "please review", `@review`, `review-requested: agent` | Spawn reviewer subagent |
+| **Human review** | "needs human review", "blocked on human", `@human`, `review-requested: human`, or references a subjective/product decision | Reassign to human, @-mention |
+| **No signal** | None of the above — work appears complete | Spawn merger subagent |
+
+When in doubt, treat as human review. It is safer to route to a human than to merge unreviewed work.
+
+### 3. Act on Each Classification
+
+#### Agent review requested
+
+Before spawning: read the issue's current persona label (the label matching a key in the `personas` map from `.scottclip/config.yaml`) and pass it as `{original_worker_persona}` to the spawn prompt. If no such label is present, skip the reviewer spawn and escalate to human instead (reassign + @mention — use the **Human review requested** procedure below).
+
+Spawn a `persona-worker` subagent via the Agent tool with a review-specific prompt. Same `subagent_type: "persona-worker"` used for normal dispatch — there is no separate reviewer persona. The spawn prompt instructs the subagent to invoke the `superpowers:requesting-code-review` skill via the Skill tool to perform the actual review. See `${CLAUDE_PLUGIN_ROOT}/references/review-gate.md` for the full prompt template.
+
+The subagent must:
+- Determine BASE_SHA (`git merge-base main HEAD`) and HEAD_SHA
+- Invoke the `superpowers:requesting-code-review` skill with the issue description as requirements and the diff SHAs
+- Verify tests pass
+- Post a Linear comment with verdict (`Approved` or `Changes requested`)
+- If approved: merge the branch, push, delete worktree, mark issue Done
+- If changes requested: post findings, move issue back to In Progress, add `Reassigned → {original_worker_persona}` so Orchestrator re-routes
+
+#### Human review requested
+
+1. Call `mcp__linear-agent__linear_save_issue` to reassign the issue to the board user (`linear.user_name` from `.scottclip/config.yaml`).
+2. Call `mcp__linear-agent__linear_create_comment`:
+
+    ```
+    **🤖 orchestrator**
+
+    @${user_name} — review needed for `<branch-name>`. <one-line summary of what the worker did>.
+
+    ---
+    *ScottClip · orchestrator · [WOT-XX](link)*
+    ```
+
+3. Leave the issue in "In Review" state. Do not change the persona label.
+
+#### No signal — spawn merger subagent
+
+Spawn a merger subagent via the Agent tool. See `${CLAUDE_PLUGIN_ROOT}/references/review-gate.md` for the full prompt template. The merger subagent must:
+- `cd` to the worktree directory
+- Verify the branch is clean (no uncommitted changes)
+- Verify tests pass (run the project's test command)
+- Verify no conflicts with main (`git merge --no-commit --no-ff main`)
+- Merge into main (fast-forward if the repo uses it, otherwise `--no-ff` — infer from recent `git log --oneline --graph`)
+- Push main
+- Delete the worktree (`git worktree remove`)
+- Mark the Linear issue Done with a completion comment
+
+If any step fails, the merger subagent must NOT proceed with the merge. Instead: post a Linear comment describing the failure, reassign the issue to `${user_name}`, and @-mention them with the failure reason.
+
+**Hard constraints on the merger subagent** (include these verbatim in its spawn prompt):
+- Never force-push
+- Never merge when CI is red or tests fail
+- Never merge when there are unresolved conflicts
+- When in doubt, escalate to human instead of proceeding
+
+### 4. Log Sweep Results
+
+After all candidates are processed, log to the heartbeat summary:
+- Count of issues swept
+- Per-issue: issue ID, classification, action taken
+
+Proceed to triage only after the sweep completes.
 
 ## Triage Procedure
 

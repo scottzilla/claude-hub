@@ -91,6 +91,68 @@ To dispatch multiple sub-agents in parallel, include all Agent calls in a single
 
 Each sub-agent returns a summary with: issue ID, final state, commits, sub-issues created, and escalation flag. The orchestrator does NOT update Linear — sub-agents handle their own state transitions.
 
+### Spawning a reviewer subagent (review gate)
+
+Use when a worker comment signals agent review requested (`@review`, `review-requested: agent`, "requesting review", "please review").
+
+A reviewer is just a normal `persona-worker` subagent with a review-specific prompt — same `subagent_type: "persona-worker"` used for normal dispatch, no separate reviewer persona. The spawn prompt instructs the subagent to invoke the `superpowers:requesting-code-review` skill to do the actual review.
+
+    Thinking effort: medium
+
+    You are reviewing another worker's branch. You do NOT write new features — only review and leave a verdict.
+
+    Issue: {issue_id} - {issue_title}
+    Branch: {branch_name}
+    Worktree path: {worktree_path}
+    Original worker persona: {original_worker_persona}
+
+    Worker summary:
+    {last_worker_comment}
+
+    Review procedure:
+    1. cd to {worktree_path}
+    2. BASE_SHA=$(git merge-base main HEAD); HEAD_SHA=$(git rev-parse HEAD)
+    3. Invoke the `superpowers:requesting-code-review` skill via the Skill tool with WHAT_WAS_IMPLEMENTED (from worker comment), PLAN_OR_REQUIREMENTS (issue description), BASE_SHA, HEAD_SHA, and DESCRIPTION (one-line summary).
+    4. Run the project test command. If tests fail, treat as Changes Requested.
+    5. Post a Linear comment on {issue_id} with verdict:
+       - Approved (no Critical/Important issues, tests pass): describe the review skill's checks, then merge (fast-forward or --no-ff per repo convention), push, delete worktree, mark issue Done.
+       - Changes requested (Critical/Important issues or failing tests): list findings with severity, move issue back to In Progress, post comment with `Reassigned → {original_worker_persona}` so Orchestrator re-routes. Do NOT re-label to a reviewer persona.
+    6. Never force-push. Never merge with failing tests. Never merge with unresolved conflicts. Never resolve conflicts yourself — escalate.
+
+### Spawning a merger subagent (review gate)
+
+Use when a worker comment has no explicit review signal and work appears complete.
+
+    $AGENT_HOME = .scottclip/personas/{persona_name}
+    Thinking effort: low
+
+    You are a merge executor. You do NOT review code quality — only verify mechanical merge safety and execute.
+
+    Issue: {issue_id} - {issue_title}
+    Branch: {branch_name}
+    Worktree path: {worktree_path}
+
+    Worker summary:
+    {last_worker_comment}
+
+    Merge procedure:
+    1. cd to {worktree_path}
+    2. Verify branch is clean: git status --porcelain (must be empty)
+    3. Run the project test command. If tests fail, STOP — do not merge.
+    4. Verify no conflicts: git merge --no-commit --no-ff main; git merge --abort
+    5. Infer merge style from recent git log --oneline --graph (fast-forward vs --no-ff)
+    6. Merge: git checkout main && git merge {branch} [--no-ff if convention requires]
+    7. Push: git push origin main
+    8. Delete worktree: git worktree remove {worktree_path}
+    9. Mark Linear issue {issue_id} Done. Post completion comment listing commits merged.
+
+    HARD CONSTRAINTS — if any apply, STOP and escalate to human instead:
+    - Never force-push under any circumstance
+    - Never merge when CI is red or tests fail
+    - Never merge when git reports unresolved conflicts
+    - Never merge when the branch is not clean (uncommitted changes)
+    - If any step is ambiguous or fails unexpectedly, reassign issue to {user_name} with @-mention and failure description
+
 ## Not Used
 
-The Orchestrator does not use repo tools (file read/write, git, bash, etc.) except `Read` for loading persona config.yaml files before dispatch.
+The Orchestrator does not use repo tools (file read/write, git, bash, etc.) except `Read` for loading persona config.yaml files and review-gate reference files before dispatch.

@@ -54,6 +54,35 @@ Otherwise, perform the normal inbox scan:
    - Secondary: priority — Urgent > High > Medium > Low > None
 4. Detect stale "In Progress" issues: if an issue is "In Progress" but has no heartbeat comment within `stale_lock_hours`, move it to "Todo" via `mcp__claude_ai_Linear__save_issue` and post a cleanup comment.
 
+## Step 2.5: Review Gate Sweep
+
+> Skip this step if `--issue <ID>` was set (single-issue mode) or if `--persona <name>` is set (persona-filtered mode — sweep is orchestrator-only work).
+
+Before picking new issues, sweep for parked work that workers have left waiting on review or merge. This runs once per heartbeat cycle, immediately after the inbox scan.
+
+1. Call `mcp__claude_ai_Linear__list_issues` filtered to:
+   - State name "In Review" (all issues, regardless of assignee), OR
+   - State name "In Progress" where assignee is null or is the orchestrator itself
+
+2. For each candidate, call `mcp__claude_ai_Linear__list_comments` and read the most recent ScottClip comment (starts with `**🤖`).
+
+3. Classify and act (read `${CLAUDE_PLUGIN_ROOT}/references/review-gate.md` for full heuristics and spawn prompt templates):
+
+   | Signal in latest worker comment | Action |
+   |---------------------------------|--------|
+   | "requesting review", "please review", `@review`, `review-requested: agent` | Spawn a `persona-worker` subagent (Agent tool, `subagent_type: "persona-worker"`) with a review-specific prompt instructing it to invoke the `superpowers:requesting-code-review` skill |
+   | "needs human review", "blocked on human", `@human`, `review-requested: human`, or subjective/product decision | Reassign issue to `${user_name}` (from config), post @-mention comment |
+   | No signal — work appears complete | Spawn a `persona-worker` subagent (Agent tool, `subagent_type: "persona-worker"`) with a merger prompt |
+   | Cannot classify confidently | Treat as human review (safer than accidental merge) |
+
+4. Spawn all reviewer and merger subagents in a single message for parallel execution.
+
+5. Wait for all subagents to return. Log results (issue ID, classification, outcome) to the heartbeat summary.
+
+6. After the sweep completes (or if there are no candidates), proceed to Step 3.
+
+> **Safety:** The orchestrator never runs git or bash directly during the sweep. All repository operations are delegated to subagents. Merger subagents carry hard constraints: no force-push, no merge with failing tests, no merge with unresolved conflicts — escalate to human on any failure.
+
 ## Step 3: Collect Ready Issues
 
 If `--issue <ID>` is set, this step was skipped — the single issue from Step 2 is the only issue to work.
