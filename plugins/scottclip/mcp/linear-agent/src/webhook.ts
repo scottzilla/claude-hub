@@ -1,9 +1,10 @@
 import { Hono } from "hono";
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { readFile, unlink } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ackSession, spawnClaudeSession, moveIssueToState } from "./spawn.js";
+import { resolveSessionMapping, commitMapping, ccFilePath } from "./session-store.js";
 
 function readConfigRaw(): string | null {
   const agentCwd = process.env.AGENT_CWD || process.cwd();
@@ -228,7 +229,31 @@ export function createWebhookRoute(): Hono {
             );
           }
 
-          spawnClaudeSession(event).catch((err) => console.error("Spawn error:", err));
+          const agentCwd = process.env.AGENT_CWD || process.cwd();
+          resolveSessionMapping(agentCwd, sessionId).then(async (resolved) => {
+            const spawnOpts = resolved.mode === "resume"
+              ? { resume: resolved.info.resume }
+              : { sessionId: resolved.info.sessionId };
+
+            const ccId = resolved.mode === "resume"
+              ? resolved.info.resume
+              : resolved.info.sessionId;
+
+            try {
+              await spawnClaudeSession(event, spawnOpts);
+              await commitMapping(agentCwd, sessionId, ccId);
+            } catch (err) {
+              if (resolved.mode === "resume") {
+                console.error(`Resume failed for session ${sessionId} (cc: ${ccId}), falling back to cold spawn:`, err);
+                await unlink(ccFilePath(agentCwd, sessionId)).catch(() => undefined);
+                const freshSessionId = randomUUID();
+                await spawnClaudeSession(event, { sessionId: freshSessionId });
+                await commitMapping(agentCwd, sessionId, freshSessionId);
+              } else {
+                throw err;
+              }
+            }
+          }).catch((err) => console.error("Spawn error:", err));
         }
       }
 

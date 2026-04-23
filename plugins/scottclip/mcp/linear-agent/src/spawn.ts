@@ -202,7 +202,15 @@ export async function ackSession(sessionId: string, message = "Starting up..."):
   }
 }
 
-export async function spawnClaudeSession(event: Record<string, unknown>): Promise<void> {
+export interface SpawnSessionOptions {
+  resume?: string;
+  sessionId?: string;
+}
+
+export async function spawnClaudeSession(
+  event: Record<string, unknown>,
+  spawnOpts?: SpawnSessionOptions,
+): Promise<void> {
   const targetRepo = process.env.AGENT_CWD;
   if (!targetRepo) {
     console.error("AGENT_CWD not set — cannot spawn Claude session");
@@ -215,14 +223,33 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
   const issueIdentifier = (webhookIssue?.identifier || session?.issueIdentifier || "unknown") as string;
   const sessionId = (session?.id || "unknown") as string;
 
-  // Fetch full issue with labels before spawning
-  let fetchedIssue: IssueData | null = null;
-  if (issueId) {
-    console.log(`Fetching issue ${issueIdentifier} (${issueId}) before spawn...`);
-    fetchedIssue = await fetchIssue(issueId);
-  }
+  let prompt: string;
 
-  const { prompt } = buildClaudeArgs(event, fetchedIssue);
+  if (spawnOpts?.resume) {
+    // Resumed session — skip full issue re-fetch; send only the new user message
+    const comment = session?.comment as Record<string, unknown> | undefined;
+    const creator = session?.creator as Record<string, unknown> | undefined;
+    const userName = (creator?.name || "someone") as string;
+    const userMessage = comment?.body as string | undefined;
+
+    const lines = [
+      `## Session`,
+      `- Session ID: ${sessionId}`,
+      `- Action: ${(event.action as string) || "unknown"}`,
+    ];
+    if (userMessage) {
+      lines.push(``, `## Message from ${userName}`, userMessage);
+    }
+    prompt = lines.join("\n");
+  } else {
+    // First run — fetch full issue context
+    let fetchedIssue: IssueData | null = null;
+    if (issueId) {
+      console.log(`Fetching issue ${issueIdentifier} (${issueId}) before spawn...`);
+      fetchedIssue = await fetchIssue(issueId);
+    }
+    ({ prompt } = buildClaudeArgs(event, fetchedIssue));
+  }
 
   console.log(`Spawning Claude for ${issueIdentifier} (session ${sessionId})`);
 
@@ -248,6 +275,8 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
         allowedTools: ["mcp__linear-agent*", "Read", "Write", "Edit", "Bash", "Grep", "Glob", "Agent"],
         permissionMode: "bypassPermissions",
         settingSources: ["project"],
+        ...(spawnOpts?.resume ? { resume: spawnOpts.resume } : {}),
+        ...(spawnOpts?.sessionId ? { sessionId: spawnOpts.sessionId } : {}),
       },
     } as any)) {
       const msg = message as Record<string, unknown>;
