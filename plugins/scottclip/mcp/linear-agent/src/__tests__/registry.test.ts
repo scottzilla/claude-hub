@@ -1,11 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 let homeDir: string;
 
 beforeEach(() => {
+  vi.resetModules();
   homeDir = mkdtempSync(join(tmpdir(), "sc-registry-"));
   process.env.SCOTTCLIP_HOME = homeDir;
 });
