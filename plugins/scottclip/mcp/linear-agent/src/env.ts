@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 export function parseDotEnv(content: string): Record<string, string> {
@@ -29,31 +30,39 @@ export function parseDotEnv(content: string): Record<string, string> {
 }
 
 export function loadDotEnv(): void {
-  const cwd = process.cwd();
-  const envPath = join(cwd, ".scottclip", ".env");
+  const homeRoot = process.env.SCOTTCLIP_HOME || join(homedir(), ".scottclip");
+  const globalPath = join(homeRoot, ".env");
+  const repoPath = join(process.cwd(), ".scottclip", ".env");
 
-  try {
-    const content = readFileSync(envPath, "utf-8");
-    const vars = parseDotEnv(content);
+  const sources: Array<{ label: string; path: string }> = [
+    { label: "global", path: globalPath },
+    { label: "repo", path: repoPath },
+  ];
 
-    let loaded = 0;
-    for (const [key, value] of Object.entries(vars)) {
-      // Do not override existing env vars (explicit env takes precedence)
-      if (process.env[key] === undefined) {
-        process.env[key] = value;
-        loaded++;
+  let totalLoaded = 0;
+  for (const src of sources) {
+    try {
+      const content = readFileSync(src.path, "utf-8");
+      const vars = parseDotEnv(content);
+      let loaded = 0;
+      for (const [key, value] of Object.entries(vars)) {
+        if (process.env[key] === undefined) {
+          process.env[key] = value;
+          loaded++;
+        }
+      }
+      if (loaded > 0) {
+        console.log(`Loaded ${loaded} env var(s) from ${src.path} (${src.label})`);
+        totalLoaded += loaded;
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        console.error(`Error reading ${src.path}:`, err);
       }
     }
+  }
 
-    if (loaded > 0) {
-      console.log(`Loaded ${loaded} env var(s) from ${envPath}`);
-    }
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      // .env file not found — not an error, just skip
-      console.log(`No .scottclip/.env found in ${cwd} (this is fine for dev/manual mode)`);
-    } else {
-      console.error(`Error reading ${envPath}:`, err);
-    }
+  if (totalLoaded === 0) {
+    console.log("No .env files found in ~/.scottclip/ or .scottclip/ — relying on process env");
   }
 }
