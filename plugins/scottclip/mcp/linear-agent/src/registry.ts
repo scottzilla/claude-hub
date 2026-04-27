@@ -10,7 +10,7 @@ import {
   statSync,
 } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { homeRoot } from "./env.js";
 
 export interface RegistryEntry {
   teamId: string;
@@ -26,22 +26,18 @@ export interface RegistryFile {
   teams: Record<string, RegistryEntry>;
 }
 
-function home(): string {
-  return process.env.SCOTTCLIP_HOME || join(homedir(), ".scottclip");
-}
-
 function registryPath(): string {
-  return join(home(), "registry.json");
+  return join(homeRoot(), "registry.json");
 }
 
 function lockPath(): string {
-  return join(home(), "registry.lock");
+  return join(homeRoot(), "registry.lock");
 }
 
 let cache: { data: RegistryFile; mtimeMs: number } | null = null;
 
 function ensureHome(): void {
-  const dir = home();
+  const dir = homeRoot();
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
   }

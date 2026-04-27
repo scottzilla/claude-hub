@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+export function homeRoot(): string {
+  return process.env.SCOTTCLIP_HOME || join(homedir(), ".scottclip");
+}
+
 export function parseDotEnv(content: string): Record<string, string> {
   const result: Record<string, string> = {};
 
@@ -30,8 +34,7 @@ export function parseDotEnv(content: string): Record<string, string> {
 }
 
 export function loadDotEnv(): void {
-  const homeRoot = process.env.SCOTTCLIP_HOME || join(homedir(), ".scottclip");
-  const globalPath = join(homeRoot, ".env");
+  const globalPath = join(homeRoot(), ".env");
   const repoPath = join(process.cwd(), ".scottclip", ".env");
 
   const sources: Array<{ label: string; path: string }> = [
