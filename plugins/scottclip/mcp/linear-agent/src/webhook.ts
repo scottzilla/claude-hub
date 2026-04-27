@@ -126,7 +126,14 @@ function buildRepoContext(event: Record<string, unknown>): RepoContext | "unknow
     if (!teamId) return "no-team-id";
     const entry = registryLookup(teamId);
     if (!entry) return "unknown-team";
-    registryTouch(teamId);
+    // Defer the touch off the request hot path — lastEventAt is informational
+    setImmediate(() => {
+      try {
+        registryTouch(teamId);
+      } catch (err) {
+        console.error("registryTouch error:", err);
+      }
+    });
     return {
       teamId: entry.teamId,
       cwd: entry.cwd,
@@ -206,24 +213,35 @@ export function createWebhookRoute(): Hono {
           console.log(`Session ${sessionId} creator: ${JSON.stringify({ id: creatorDebug.id, name: creatorDebug.name, isBot: creatorDebug.isBot, type: creatorDebug.type })}`);
         }
 
+        // Skip bot-triggered sessions
+        const creator = sessionData.creator as Record<string, unknown> | undefined;
+        const creatorIsBot = creator?.isBot === true || creator?.type === "application";
+        if (creatorIsBot) {
+          console.log(`Ignoring bot-triggered session ${sessionId}`);
+          return response;
+        }
+
+        // Resolve repo context once — reused by both stop and created/prompted paths
+        const ctxOrSentinel = buildRepoContext(event);
+
         // Stop signal — route via registry OR sessionTeamMap depending on payload
         const signal = (event.agentActivity as Record<string, unknown> | undefined)?.signal;
         if (signal === "stop") {
           console.log(`Stop signal received for session ${sessionId}`);
           // Defensive: try registry path first; if no teamId on event, fall back to sessionTeamMap.
-          let ctxOrSentinel: RepoContext | "unknown-team" | "no-team-id" = buildRepoContext(event);
-          if (ctxOrSentinel === "no-team-id") {
+          let resolved = ctxOrSentinel;
+          if (resolved === "no-team-id") {
             const mapped = sessionTeamMap.get(sessionId);
             if (mapped) {
               const entry = registryLookup(mapped);
-              if (entry) ctxOrSentinel = { teamId: entry.teamId, cwd: entry.cwd, configPath: entry.configPath, organizationId: entry.organizationId };
+              if (entry) resolved = { teamId: entry.teamId, cwd: entry.cwd, configPath: entry.configPath, organizationId: entry.organizationId };
             }
           }
-          if (typeof ctxOrSentinel === "string") {
-            console.log(`Stop signal for ${sessionId}: cannot resolve team (${ctxOrSentinel}) — ignoring`);
+          if (typeof resolved === "string") {
+            console.log(`Stop signal for ${sessionId}: cannot resolve team (${resolved}) — ignoring`);
             return response;
           }
-          const sessionsDir = join(ctxOrSentinel.cwd, ".scottclip", "sessions");
+          const sessionsDir = join(resolved.cwd, ".scottclip", "sessions");
           const sessionFile = join(sessionsDir, `${sessionId}.pid`);
           try {
             const pid = parseInt(await readFile(sessionFile, "utf-8"), 10);
@@ -239,16 +257,6 @@ export function createWebhookRoute(): Hono {
           return response;
         }
 
-        // Skip bot-triggered sessions
-        const creator = sessionData.creator as Record<string, unknown> | undefined;
-        const creatorIsBot = creator?.isBot === true || creator?.type === "application";
-        if (creatorIsBot) {
-          console.log(`Ignoring bot-triggered session ${sessionId}`);
-          return response;
-        }
-
-        // Resolve repo context
-        const ctxOrSentinel = buildRepoContext(event);
         if (ctxOrSentinel === "unknown-team") {
           console.log(`Ignoring AgentSessionEvent for unregistered team (session ${sessionId})`);
           return response;

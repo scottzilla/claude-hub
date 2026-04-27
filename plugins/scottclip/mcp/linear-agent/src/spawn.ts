@@ -334,10 +334,16 @@ export async function spawnClaudeSession(
     // Write result to log
     await writeFile(logPath, finalResult || "(no result)");
     console.log(`Session ${sessionId} completed for ${issueIdentifier}`);
+    if (opts.sessionMap && sessionId !== "unknown") {
+      opts.sessionMap.delete(sessionId);
+    }
 
   } catch (err) {
     console.error(`Session ${sessionId} failed for ${issueIdentifier}:`, err);
     await writeFile(logPath, `Error: ${err instanceof Error ? err.message : String(err)}`);
+    if (opts.sessionMap && sessionId !== "unknown") {
+      opts.sessionMap.delete(sessionId);
+    }
 
     // Linear has no agentSessionFailed mutation — error is logged above, session left as-is
   }

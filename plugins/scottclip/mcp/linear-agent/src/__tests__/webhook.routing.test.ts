@@ -27,6 +27,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   delete process.env.SCOTTCLIP_HOME;
   delete process.env.LINEAR_WEBHOOK_SECRET;
   delete process.env.AGENT_CWD;
@@ -206,6 +207,5 @@ describe("webhook routing — per-team debouncer", () => {
     expect(spawnClaudeSession).toHaveBeenCalledTimes(2);
     const ctxs = (spawnClaudeSession as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1]);
     expect(ctxs.map((c) => c.teamId).sort()).toEqual(["team-a", "team-b"]);
-    vi.useRealTimers();
   });
 });
