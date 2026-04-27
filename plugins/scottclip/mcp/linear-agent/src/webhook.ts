@@ -8,29 +8,16 @@ import type { RepoContext } from "./repo-context.js";
 import { lookup as registryLookup, list as registryList, touch as registryTouch } from "./registry.js";
 import { extractTeamId } from "./repo-context.js";
 
-function readConfigRaw(): string | null {
-  const agentCwd = process.env.AGENT_CWD || process.cwd();
-  try {
-    return readFileSync(join(agentCwd, ".scottclip", "config.yaml"), "utf-8");
-  } catch {
-    return null;
-  }
-}
-
-
 export interface AutoReactConfig {
   autoReact: boolean;
   quietWindowS: number;
 }
 
-export function getAutoReactConfig(raw?: string): AutoReactConfig {
+export function getAutoReactConfig(raw: string | undefined): AutoReactConfig {
   const defaults: AutoReactConfig = { autoReact: false, quietWindowS: 30 };
-  const content = raw ?? readConfigRaw();
-  if (!content) return defaults;
-
-  const autoReactMatch = content.match(/^\s*auto_react:\s*(true|false)/m);
-  const quietWindowMatch = content.match(/^\s*quiet_window_s:\s*(\d+)/m);
-
+  if (!raw) return defaults;
+  const autoReactMatch = raw.match(/^\s*auto_react:\s*(true|false)/m);
+  const quietWindowMatch = raw.match(/^\s*quiet_window_s:\s*(\d+)/m);
   return {
     autoReact: autoReactMatch ? autoReactMatch[1] === "true" : defaults.autoReact,
     quietWindowS: quietWindowMatch ? parseInt(quietWindowMatch[1], 10) : defaults.quietWindowS,
