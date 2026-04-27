@@ -24,6 +24,12 @@ const VIEWER_QUERY = `
   }
 `;
 
+const ORGANIZATION_QUERY = `
+  query Organization {
+    organization { id name urlKey }
+  }
+`;
+
 const GET_USER_QUERY = `
   query GetUser($id: String!) {
     user(id: $id) { id name email active displayName }
@@ -64,6 +70,18 @@ export function registerTeamTools(server: McpServer) {
     async () => {
       const data = await gql<{ viewer: unknown }>(VIEWER_QUERY);
       return { content: [{ type: "text" as const, text: JSON.stringify(data.viewer, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    "linear_get_organization",
+    {
+      description: "Return the current Linear workspace (organization). Used by /sc-init to enforce single-workspace per server.",
+      inputSchema: {},
+    },
+    async () => {
+      const data = await gql<{ organization: { id: string; name: string; urlKey: string } }>(ORGANIZATION_QUERY);
+      return { content: [{ type: "text" as const, text: JSON.stringify(data.organization, null, 2) }] };
     },
   );
 

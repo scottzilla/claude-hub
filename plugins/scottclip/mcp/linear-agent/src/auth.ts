@@ -186,7 +186,7 @@ async function refreshToken(token: TokenData): Promise<TokenData> {
   return newToken;
 }
 
-export function getAuthUrl(): string {
+export function getAuthUrl(state?: string): string {
   const clientId = process.env.LINEAR_CLIENT_ID;
   if (!clientId) {
     throw new Error("LINEAR_CLIENT_ID must be set.");
@@ -200,6 +200,7 @@ export function getAuthUrl(): string {
     scope: "read,write,app:assignable,app:mentionable",
     actor: "app",
   });
+  if (state) params.set("state", state);
   return `https://linear.app/oauth/authorize?${params}`;
 }
 
