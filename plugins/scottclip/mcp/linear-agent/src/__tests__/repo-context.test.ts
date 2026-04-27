@@ -52,4 +52,14 @@ describe("extractTeamId", () => {
     };
     expect(extractTeamId(event)).toBe("team-from-session");
   });
+
+  it("returns null when teamId is an empty string", () => {
+    const event = { data: { teamId: "" } };
+    expect(extractTeamId(event)).toBeNull();
+  });
+
+  it("returns null when teamId is not a string (e.g. number)", () => {
+    const event = { data: { teamId: 42 } };
+    expect(extractTeamId(event)).toBeNull();
+  });
 });
