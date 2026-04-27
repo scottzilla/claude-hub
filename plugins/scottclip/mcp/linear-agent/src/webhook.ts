@@ -191,6 +191,7 @@ export function createWebhookRoute(): Hono {
         const signal = event.agentActivity?.signal;
         if (signal === "stop") {
           console.log(`Stop signal received for session ${sessionId}`);
+          // TODO(Task 4): resolve cwd from registry/sessionMap instead of AGENT_CWD when multi-repo routing lands
           const agentCwd = process.env.AGENT_CWD || process.cwd();
           const sessionsDir = join(agentCwd, ".scottclip", "sessions");
           const sessionFile = join(sessionsDir, `${sessionId}.pid`);
