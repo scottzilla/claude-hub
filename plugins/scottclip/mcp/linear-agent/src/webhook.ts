@@ -4,6 +4,7 @@ import { readFile, unlink } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ackSession, spawnClaudeSession, moveIssueToState } from "./spawn.js";
+import type { RepoContext } from "./repo-context.js";
 
 function readConfigRaw(): string | null {
   const agentCwd = process.env.AGENT_CWD || process.cwd();
@@ -121,6 +122,16 @@ export function verifySignature(
   return match;
 }
 
+function legacyContext(): RepoContext {
+  const cwd = process.env.AGENT_CWD || process.cwd();
+  return {
+    teamId: "legacy",
+    cwd,
+    configPath: join(cwd, ".scottclip", "config.yaml"),
+    organizationId: "legacy",
+  };
+}
+
 export function createWebhookRoute(): Hono {
   const app = new Hono();
 
@@ -140,7 +151,7 @@ export function createWebhookRoute(): Hono {
         guidance: "Auto-react triggered by Issue webhook events. Run a heartbeat cycle: pick up issues from the inbox, triage unlabeled ones, dispatch to personas.",
         promptContext: `Triggered by ${eventCount} Issue event(s).`,
       };
-      spawnClaudeSession(syntheticEvent)
+      spawnClaudeSession(syntheticEvent, legacyContext())
         .catch((err) => console.error("Auto-react spawn error:", err))
         .finally(() => debouncer.setRunning(false));
     },
@@ -228,7 +239,7 @@ export function createWebhookRoute(): Hono {
             );
           }
 
-          spawnClaudeSession(event).catch((err) => console.error("Spawn error:", err));
+          spawnClaudeSession(event, legacyContext()).catch((err) => console.error("Spawn error:", err));
         }
       }
 

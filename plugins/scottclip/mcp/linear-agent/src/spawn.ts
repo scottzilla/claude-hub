@@ -2,6 +2,7 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { gql } from "./graphql.js";
+import type { RepoContext } from "./repo-context.js";
 
 const ACK_MUTATION = `
   mutation AckSession($input: AgentActivityCreateInput!) {
@@ -202,10 +203,14 @@ export async function ackSession(sessionId: string, message = "Starting up..."):
   }
 }
 
-export async function spawnClaudeSession(event: Record<string, unknown>): Promise<void> {
-  const targetRepo = process.env.AGENT_CWD;
+export async function spawnClaudeSession(
+  event: Record<string, unknown>,
+  ctx: RepoContext,
+  opts: { sessionMap?: Map<string, string> } = {},
+): Promise<void> {
+  const targetRepo = ctx.cwd;
   if (!targetRepo) {
-    console.error("AGENT_CWD not set — cannot spawn Claude session");
+    console.error("RepoContext.cwd missing — cannot spawn Claude session");
     return;
   }
 
@@ -214,6 +219,11 @@ export async function spawnClaudeSession(event: Record<string, unknown>): Promis
   const issueId = (webhookIssue?.id || session?.issueId || "") as string;
   const issueIdentifier = (webhookIssue?.identifier || session?.issueIdentifier || "unknown") as string;
   const sessionId = (session?.id || "unknown") as string;
+
+  // Track sessionId → teamId so the stop handler can route without re-extraction
+  if (opts.sessionMap && sessionId !== "unknown") {
+    opts.sessionMap.set(sessionId, ctx.teamId);
+  }
 
   // Fetch full issue with labels before spawning
   let fetchedIssue: IssueData | null = null;
