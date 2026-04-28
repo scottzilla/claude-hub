@@ -161,7 +161,8 @@ describe("webhook routing — legacy fallback", () => {
     expect(spawnClaudeSession).toHaveBeenCalledTimes(1);
     const ctx = (spawnClaudeSession as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(ctx.cwd).toBe("/legacy/repo");
-    expect(ctx.teamId).toBe("legacy");
+    expect(ctx.teamId).toBe("team-anything"); // from event payload
+    expect(ctx.organizationId).toBe("legacy"); // still the legacy marker
   });
 });
 

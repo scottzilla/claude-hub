@@ -132,8 +132,9 @@ function buildRepoContext(event: Record<string, unknown>): RepoContext | "unknow
 
   // Legacy fallback — registry empty/missing
   const cwd = process.env.AGENT_CWD || process.cwd();
+  const eventTeamId = extractTeamId(event);
   return {
-    teamId: "legacy",
+    teamId: eventTeamId ?? "legacy",
     cwd,
     configPath: join(cwd, ".scottclip", "config.yaml"),
     organizationId: "legacy",
