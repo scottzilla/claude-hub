@@ -203,10 +203,15 @@ export async function ackSession(sessionId: string, message = "Starting up..."):
   }
 }
 
+export interface SpawnSessionOptions {
+  resume?: string;
+  sessionId?: string;
+}
+
 export async function spawnClaudeSession(
   event: Record<string, unknown>,
   ctx: RepoContext,
-  opts: { sessionMap?: Map<string, string> } = {},
+  opts: SpawnSessionOptions & { sessionMap?: Map<string, string> } = {},
 ): Promise<void> {
   const targetRepo = ctx.cwd;
   if (!targetRepo) {
@@ -225,14 +230,33 @@ export async function spawnClaudeSession(
     opts.sessionMap.set(sessionId, ctx.teamId);
   }
 
-  // Fetch full issue with labels before spawning
-  let fetchedIssue: IssueData | null = null;
-  if (issueId) {
-    console.log(`Fetching issue ${issueIdentifier} (${issueId}) before spawn...`);
-    fetchedIssue = await fetchIssue(issueId);
-  }
+  let prompt: string;
 
-  const { prompt } = buildClaudeArgs(event, fetchedIssue);
+  if (opts?.resume) {
+    // Resumed session — skip full issue re-fetch; send only the new user message
+    const comment = session?.comment as Record<string, unknown> | undefined;
+    const creator = session?.creator as Record<string, unknown> | undefined;
+    const userName = (creator?.name || "someone") as string;
+    const userMessage = comment?.body as string | undefined;
+
+    const lines = [
+      `## Session`,
+      `- Session ID: ${sessionId}`,
+      `- Action: ${(event.action as string) || "unknown"}`,
+    ];
+    if (userMessage) {
+      lines.push(``, `## Message from ${userName}`, userMessage);
+    }
+    prompt = lines.join("\n");
+  } else {
+    // First run — fetch full issue context
+    let fetchedIssue: IssueData | null = null;
+    if (issueId) {
+      console.log(`Fetching issue ${issueIdentifier} (${issueId}) before spawn...`);
+      fetchedIssue = await fetchIssue(issueId);
+    }
+    ({ prompt } = buildClaudeArgs(event, fetchedIssue));
+  }
 
   console.log(`Spawning Claude for ${issueIdentifier} (session ${sessionId})`);
 
@@ -258,6 +282,8 @@ export async function spawnClaudeSession(
         allowedTools: ["mcp__linear-agent*", "Read", "Write", "Edit", "Bash", "Grep", "Glob", "Agent"],
         permissionMode: "bypassPermissions",
         settingSources: ["project"],
+        ...(opts?.resume ? { resume: opts.resume } : {}),
+        ...(opts?.sessionId ? { sessionId: opts.sessionId } : {}),
       },
     } as any)) {
       const msg = message as Record<string, unknown>;

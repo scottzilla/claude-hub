@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { readFile, unlink } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -7,6 +7,7 @@ import { ackSession, spawnClaudeSession, moveIssueToState } from "./spawn.js";
 import type { RepoContext } from "./repo-context.js";
 import { lookup as registryLookup, list as registryList, touch as registryTouch } from "./registry.js";
 import { extractTeamId } from "./repo-context.js";
+import { resolveSessionMapping, commitMapping, ccFilePath } from "./session-store.js";
 
 export interface AutoReactConfig {
   autoReact: boolean;
@@ -265,9 +266,36 @@ export function createWebhookRoute(): Hono {
             );
           }
 
-          spawnClaudeSession(event, ctx, { sessionMap: sessionTeamMap }).catch((err) =>
-            console.error("Spawn error:", err),
-          );
+          resolveSessionMapping(ctx.cwd, sessionId).then(async (resolved) => {
+            const resumeOpts = resolved.mode === "resume"
+              ? { resume: resolved.info.resume }
+              : { sessionId: resolved.info.sessionId };
+
+            const ccId = resolved.mode === "resume"
+              ? resolved.info.resume
+              : resolved.info.sessionId;
+
+            try {
+              await spawnClaudeSession(event, ctx, {
+                sessionMap: sessionTeamMap,
+                ...resumeOpts,
+              });
+              await commitMapping(ctx.cwd, sessionId, ccId);
+            } catch (err) {
+              if (resolved.mode === "resume") {
+                console.error(`Resume failed for session ${sessionId} (cc: ${ccId}), falling back to cold spawn:`, err);
+                await unlink(ccFilePath(ctx.cwd, sessionId)).catch(() => undefined);
+                const freshSessionId = randomUUID();
+                await spawnClaudeSession(event, ctx, {
+                  sessionMap: sessionTeamMap,
+                  sessionId: freshSessionId,
+                });
+                await commitMapping(ctx.cwd, sessionId, freshSessionId);
+              } else {
+                throw err;
+              }
+            }
+          }).catch((err) => console.error("Spawn error:", err));
         }
       }
 
