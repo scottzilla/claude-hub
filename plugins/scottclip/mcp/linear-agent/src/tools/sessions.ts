@@ -29,13 +29,6 @@ const UPDATE_SESSION_MUTATION = `
   }
 `;
 
-const COMPLETE_SESSION_MUTATION = `
-  mutation CompleteSession($id: String!) {
-    agentSessionComplete(id: $id) {
-      success
-    }
-  }
-`;
 
 const CREATE_ACTIVITY_MUTATION = `
   mutation CreateActivity($input: AgentActivityCreateInput!) {
@@ -104,22 +97,9 @@ export function registerSessionTools(server: McpServer) {
     },
   );
 
-  server.registerTool(
-    "linear_complete_session",
-    {
-      description: "Mark an agent session as complete. Call this after successfully finishing all work on an issue.",
-      inputSchema: {
-        sessionId: z.string().describe("Session ID to complete"),
-      },
-    },
-    async (args) => {
-      const data = await gql<{
-        agentSessionComplete: { success: boolean };
-      }>(COMPLETE_SESSION_MUTATION, { id: args.sessionId });
-
-      return { content: [{ type: "text" as const, text: JSON.stringify(data.agentSessionComplete, null, 2) }] };
-    },
-  );
+  // Note: linear_complete_session is intentionally omitted. Linear's schema has no
+  // agentSessionComplete mutation. Session state is managed automatically by Linear
+  // based on the last emitted activity. See https://linear.app/developers/agent-interaction
 
   server.registerTool(
     "linear_create_activity",

@@ -12,13 +12,6 @@ const ACK_MUTATION = `
   }
 `;
 
-const COMPLETE_SESSION_MUTATION = `
-  mutation CompleteSession($id: String!) {
-    agentSessionComplete(id: $id) {
-      success
-    }
-  }
-`;
 
 const GET_ISSUE_QUERY = `
   query GetIssue($id: String!) {
@@ -352,10 +345,9 @@ export async function spawnClaudeSession(
       }).catch((err: Error) => console.error("Failed to post final activity:", err));
     }
 
-    // Mark session complete
-    await gql(COMPLETE_SESSION_MUTATION, {
-      id: sessionId,
-    }).catch((err: Error) => console.error("Failed to complete session:", err));
+    // Note: no explicit "complete session" mutation exists in Linear's schema.
+    // Linear tracks session lifecycle automatically based on the last emitted activity.
+    // See: https://linear.app/developers/agent-interaction (Session states section)
 
     // Write result to log
     await writeFile(logPath, finalResult || "(no result)");
