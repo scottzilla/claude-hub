@@ -1,4 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { parseDotEnv } from "../env.js";
 
 describe("parseDotEnv", () => {
@@ -56,5 +59,63 @@ LINEAR_CLIENT_SECRET='secret456'
     expect(result).toEqual({
       DATABASE_URL: "postgres://user:pass@host/db?ssl=true",
     });
+  });
+});
+
+describe("loadDotEnv — global home", () => {
+  let homeDir: string;
+  const KEYS = ["LINEAR_CLIENT_ID", "LINEAR_CLIENT_SECRET", "TEST_MARKER"];
+
+  beforeEach(() => {
+    vi.resetModules();
+    homeDir = mkdtempSync(join(tmpdir(), "sc-env-"));
+    process.env.SCOTTCLIP_HOME = homeDir;
+    for (const k of KEYS) delete process.env[k];
+  });
+
+  afterEach(() => {
+    delete process.env.SCOTTCLIP_HOME;
+    for (const k of KEYS) delete process.env[k];
+    rmSync(homeDir, { recursive: true, force: true });
+  });
+
+  it("loads ~/.scottclip/.env when present", async () => {
+    writeFileSync(join(homeDir, ".env"), "TEST_MARKER=from_global\n");
+    const { loadDotEnv } = await import("../env.js");
+    loadDotEnv();
+    expect(process.env.TEST_MARKER).toBe("from_global");
+  });
+
+  it("global takes precedence over per-repo legacy when both present", async () => {
+    writeFileSync(join(homeDir, ".env"), "TEST_MARKER=from_global\n");
+    const repoDir = mkdtempSync(join(tmpdir(), "sc-repo-"));
+    mkdirSync(join(repoDir, ".scottclip"), { recursive: true });
+    writeFileSync(join(repoDir, ".scottclip", ".env"), "TEST_MARKER=from_repo\n");
+    const origCwd = process.cwd();
+    process.chdir(repoDir);
+    try {
+      const { loadDotEnv } = await import("../env.js");
+      loadDotEnv();
+      expect(process.env.TEST_MARKER).toBe("from_global");
+    } finally {
+      process.chdir(origCwd);
+      rmSync(repoDir, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to per-repo .scottclip/.env when global missing", async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "sc-repo-"));
+    mkdirSync(join(repoDir, ".scottclip"), { recursive: true });
+    writeFileSync(join(repoDir, ".scottclip", ".env"), "TEST_MARKER=from_repo\n");
+    const origCwd = process.cwd();
+    process.chdir(repoDir);
+    try {
+      const { loadDotEnv } = await import("../env.js");
+      loadDotEnv();
+      expect(process.env.TEST_MARKER).toBe("from_repo");
+    } finally {
+      process.chdir(origCwd);
+      rmSync(repoDir, { recursive: true, force: true });
+    }
   });
 });

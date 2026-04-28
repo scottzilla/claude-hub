@@ -16,6 +16,7 @@ ScottClip is a **Claude Code plugin** (no runtime code — entirely markdown/YAM
 
 1. **Plugin** (this repo) — ships commands, skills, agents, references, and persona templates. Installed via `claude plugin add`.
 2. **Per-repo scaffold** (`.scottclip/`) — created by `/scottclip-init` in target repos. Contains `config.yaml`, persona directories, heartbeat log, and lockfile.
+3. **Global home** (`~/.scottclip/`) — shared across all repos in the same Linear workspace. Contains `registry.json` (teamId → repo mapping), `.env` (OAuth credentials), `token.json` (workspace-scoped access token), and `server-<port>.pid`. Created by the first `/scottclip-init`; later inits append to the registry without touching credentials.
 
 ### Core loop
 

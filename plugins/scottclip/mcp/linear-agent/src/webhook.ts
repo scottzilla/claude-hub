@@ -4,37 +4,21 @@ import { readFile, unlink } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ackSession, spawnClaudeSession, moveIssueToState } from "./spawn.js";
+import type { RepoContext } from "./repo-context.js";
+import { lookup as registryLookup, list as registryList, touch as registryTouch } from "./registry.js";
+import { extractTeamId } from "./repo-context.js";
 import { resolveSessionMapping, commitMapping, ccFilePath } from "./session-store.js";
-
-function readConfigRaw(): string | null {
-  const agentCwd = process.env.AGENT_CWD || process.cwd();
-  try {
-    return readFileSync(join(agentCwd, ".scottclip", "config.yaml"), "utf-8");
-  } catch {
-    return null;
-  }
-}
-
-function getConfiguredTeamId(): string | null {
-  const raw = readConfigRaw();
-  if (!raw) return null;
-  const match = raw.match(/^\s*team_id:\s*"?([^"\n]+)"?/m);
-  return match ? match[1].trim() : null;
-}
 
 export interface AutoReactConfig {
   autoReact: boolean;
   quietWindowS: number;
 }
 
-export function getAutoReactConfig(raw?: string): AutoReactConfig {
+export function getAutoReactConfig(raw: string | undefined): AutoReactConfig {
   const defaults: AutoReactConfig = { autoReact: false, quietWindowS: 30 };
-  const content = raw ?? readConfigRaw();
-  if (!content) return defaults;
-
-  const autoReactMatch = content.match(/^\s*auto_react:\s*(true|false)/m);
-  const quietWindowMatch = content.match(/^\s*quiet_window_s:\s*(\d+)/m);
-
+  if (!raw) return defaults;
+  const autoReactMatch = raw.match(/^\s*auto_react:\s*(true|false)/m);
+  const quietWindowMatch = raw.match(/^\s*quiet_window_s:\s*(\d+)/m);
   return {
     autoReact: autoReactMatch ? autoReactMatch[1] === "true" : defaults.autoReact,
     quietWindowS: quietWindowMatch ? parseInt(quietWindowMatch[1], 10) : defaults.quietWindowS,
@@ -122,30 +106,72 @@ export function verifySignature(
   return match;
 }
 
+function buildRepoContext(event: Record<string, unknown>): RepoContext | "unknown-team" | "no-team-id" {
+  const teamId = extractTeamId(event);
+  const registryPopulated = registryList().length > 0;
+
+  if (registryPopulated) {
+    if (!teamId) return "no-team-id";
+    const entry = registryLookup(teamId);
+    if (!entry) return "unknown-team";
+    // Defer the touch off the request hot path — lastEventAt is informational
+    setImmediate(() => {
+      try {
+        registryTouch(teamId);
+      } catch (err) {
+        console.error("registryTouch error:", err);
+      }
+    });
+    return {
+      teamId: entry.teamId,
+      cwd: entry.cwd,
+      configPath: entry.configPath,
+      organizationId: entry.organizationId,
+    };
+  }
+
+  // Legacy fallback — registry empty/missing
+  const cwd = process.env.AGENT_CWD || process.cwd();
+  return {
+    teamId: "legacy",
+    cwd,
+    configPath: join(cwd, ".scottclip", "config.yaml"),
+    organizationId: "legacy",
+  };
+}
+
 export function createWebhookRoute(): Hono {
   const app = new Hono();
 
-  // Auto-react debounce — fires heartbeat after quiet window
-  const debouncer = createDebouncedHeartbeat(
-    getAutoReactConfig().quietWindowS,
-    (eventCount) => {
-      console.log(`Auto-react: firing heartbeat (${eventCount} events in window)`);
-      debouncer.setRunning(true);
+  // Per-team auto-react debouncers
+  const debouncers = new Map<string, DebouncedHeartbeat>();
+  // sessionId → teamId map for stop-signal routing (used only if Branch B)
+  const sessionTeamMap = new Map<string, string>();
+
+  function getDebouncer(ctx: RepoContext): DebouncedHeartbeat {
+    const existing = debouncers.get(ctx.teamId);
+    if (existing) return existing;
+    const cfgRaw = (() => {
+      try { return readFileSync(ctx.configPath, "utf-8"); } catch { return undefined; }
+    })();
+    const cfg = getAutoReactConfig(cfgRaw);
+    const d = createDebouncedHeartbeat(cfg.quietWindowS, (eventCount) => {
+      console.log(`Auto-react[${ctx.teamId}]: firing heartbeat (${eventCount} events in window)`);
+      d.setRunning(true);
       const syntheticEvent: Record<string, unknown> = {
         type: "AutoReactHeartbeat",
         action: "created",
-        data: {
-          id: `auto-react-${Date.now()}`,
-          issueIdentifier: "heartbeat",
-        },
+        data: { id: `auto-react-${Date.now()}`, issueIdentifier: "heartbeat" },
         guidance: "Auto-react triggered by Issue webhook events. Run a heartbeat cycle: pick up issues from the inbox, triage unlabeled ones, dispatch to personas.",
-        promptContext: `Triggered by ${eventCount} Issue event(s).`,
+        promptContext: `Triggered by ${eventCount} Issue event(s) for team ${ctx.teamId}.`,
       };
-      spawnClaudeSession(syntheticEvent)
+      spawnClaudeSession(syntheticEvent, ctx, { sessionMap: sessionTeamMap })
         .catch((err) => console.error("Auto-react spawn error:", err))
-        .finally(() => debouncer.setRunning(false));
-    },
-  );
+        .finally(() => d.setRunning(false));
+    });
+    debouncers.set(ctx.teamId, d);
+    return d;
+  }
 
   app.post("/", async (c) => {
     const secret = process.env.LINEAR_WEBHOOK_SECRET;
@@ -168,21 +194,42 @@ export function createWebhookRoute(): Hono {
       if (event.type === "AgentSessionEvent") {
         const sessionData = event.agentSession || event.data;
         if (!sessionData?.id) return response;
-
         const sessionId = sessionData.id as string;
 
-        // Debug: log creator info to diagnose self-triggering
         const creatorDebug = sessionData.creator as Record<string, unknown> | undefined;
         if (creatorDebug) {
           console.log(`Session ${sessionId} creator: ${JSON.stringify({ id: creatorDebug.id, name: creatorDebug.name, isBot: creatorDebug.isBot, type: creatorDebug.type })}`);
         }
 
-        // Stop signal first — don't do any other work
-        const signal = event.agentActivity?.signal;
+        // Skip bot-triggered sessions
+        const creator = sessionData.creator as Record<string, unknown> | undefined;
+        const creatorIsBot = creator?.isBot === true || creator?.type === "application";
+        if (creatorIsBot) {
+          console.log(`Ignoring bot-triggered session ${sessionId}`);
+          return response;
+        }
+
+        // Resolve repo context once — reused by both stop and created/prompted paths
+        const ctxOrSentinel = buildRepoContext(event);
+
+        // Stop signal — route via registry OR sessionTeamMap depending on payload
+        const signal = (event.agentActivity as Record<string, unknown> | undefined)?.signal;
         if (signal === "stop") {
           console.log(`Stop signal received for session ${sessionId}`);
-          const agentCwd = process.env.AGENT_CWD || process.cwd();
-          const sessionsDir = join(agentCwd, ".scottclip", "sessions");
+          // Defensive: try registry path first; if no teamId on event, fall back to sessionTeamMap.
+          let resolved = ctxOrSentinel;
+          if (resolved === "no-team-id") {
+            const mapped = sessionTeamMap.get(sessionId);
+            if (mapped) {
+              const entry = registryLookup(mapped);
+              if (entry) resolved = { teamId: entry.teamId, cwd: entry.cwd, configPath: entry.configPath, organizationId: entry.organizationId };
+            }
+          }
+          if (typeof resolved === "string") {
+            console.log(`Stop signal for ${sessionId}: cannot resolve team (${resolved}) — ignoring`);
+            return response;
+          }
+          const sessionsDir = join(resolved.cwd, ".scottclip", "sessions");
           const sessionFile = join(sessionsDir, `${sessionId}.pid`);
           try {
             const pid = parseInt(await readFile(sessionFile, "utf-8"), 10);
@@ -194,44 +241,33 @@ export function createWebhookRoute(): Hono {
           } catch {
             console.log(`No active session file for ${sessionId} (may have already finished)`);
           }
+          sessionTeamMap.delete(sessionId);
           return response;
         }
 
-        // Team filter — skip events for other teams
-        const configuredTeamId = getConfiguredTeamId();
-        const issueTeamId = sessionData.issue?.teamId || sessionData.issue?.team?.id;
-        if (configuredTeamId && issueTeamId && issueTeamId !== configuredTeamId) {
-          console.log(`Ignoring event for team ${issueTeamId} (configured: ${configuredTeamId})`);
+        if (ctxOrSentinel === "unknown-team") {
+          console.log(`Ignoring AgentSessionEvent for unregistered team (session ${sessionId})`);
           return response;
         }
-
-        // Skip events triggered by the bot itself (prevents comment → session → comment loop)
-        const creator = sessionData.creator as Record<string, unknown> | undefined;
-        const creatorIsBot = creator?.isBot === true || creator?.type === "application";
-        if (creatorIsBot) {
-          console.log(`Ignoring bot-triggered session ${sessionId} (creator: ${JSON.stringify({ id: creator?.id, name: creator?.name, type: creator?.type })})`);
+        if (ctxOrSentinel === "no-team-id") {
+          console.log(`Ignoring AgentSessionEvent without teamId (session ${sessionId})`);
           return response;
         }
+        const ctx = ctxOrSentinel;
 
         if (event.action === "created" || event.action === "prompted") {
-          // Ack FIRST (must respond within 5s), then move to In Progress, then spawn
           const ackMsg = event.action === "created" ? "Starting up..." : "Reading your message...";
-          ackSession(sessionId, ackMsg).catch((err) =>
-            console.error("Ack error:", err)
-          );
+          ackSession(sessionId, ackMsg).catch((err) => console.error("Ack error:", err));
 
-          // Move issue to In Progress
           const issueId = sessionData.issue?.id;
-          const teamId = issueTeamId || configuredTeamId;
-          if (issueId && teamId) {
-            moveIssueToState(issueId as string, teamId as string, "In Progress").catch((err) =>
-              console.error("Move to In Progress error:", err)
+          if (issueId) {
+            moveIssueToState(issueId as string, ctx.teamId, "In Progress").catch((err) =>
+              console.error("Move to In Progress error:", err),
             );
           }
 
-          const agentCwd = process.env.AGENT_CWD || process.cwd();
-          resolveSessionMapping(agentCwd, sessionId).then(async (resolved) => {
-            const spawnOpts = resolved.mode === "resume"
+          resolveSessionMapping(ctx.cwd, sessionId).then(async (resolved) => {
+            const resumeOpts = resolved.mode === "resume"
               ? { resume: resolved.info.resume }
               : { sessionId: resolved.info.sessionId };
 
@@ -240,15 +276,21 @@ export function createWebhookRoute(): Hono {
               : resolved.info.sessionId;
 
             try {
-              await spawnClaudeSession(event, spawnOpts);
-              await commitMapping(agentCwd, sessionId, ccId);
+              await spawnClaudeSession(event, ctx, {
+                sessionMap: sessionTeamMap,
+                ...resumeOpts,
+              });
+              await commitMapping(ctx.cwd, sessionId, ccId);
             } catch (err) {
               if (resolved.mode === "resume") {
                 console.error(`Resume failed for session ${sessionId} (cc: ${ccId}), falling back to cold spawn:`, err);
-                await unlink(ccFilePath(agentCwd, sessionId)).catch(() => undefined);
+                await unlink(ccFilePath(ctx.cwd, sessionId)).catch(() => undefined);
                 const freshSessionId = randomUUID();
-                await spawnClaudeSession(event, { sessionId: freshSessionId });
-                await commitMapping(agentCwd, sessionId, freshSessionId);
+                await spawnClaudeSession(event, ctx, {
+                  sessionMap: sessionTeamMap,
+                  sessionId: freshSessionId,
+                });
+                await commitMapping(ctx.cwd, sessionId, freshSessionId);
               } else {
                 throw err;
               }
@@ -259,20 +301,21 @@ export function createWebhookRoute(): Hono {
 
       // --- Issue event handler (auto_react) ---
       if (event.type === "Issue") {
-        const config = getAutoReactConfig();
+        const ctxOrSentinel = buildRepoContext(event);
+        if (ctxOrSentinel === "unknown-team" || ctxOrSentinel === "no-team-id") {
+          console.log(`Auto-react: ignoring Issue event (${ctxOrSentinel})`);
+          return response;
+        }
+        const ctx = ctxOrSentinel;
+        const cfgRaw = (() => {
+          try { return readFileSync(ctx.configPath, "utf-8"); } catch { return undefined; }
+        })();
+        const config = getAutoReactConfig(cfgRaw);
         if (config.autoReact) {
-          // Team filter
-          const configuredTeamId = getConfiguredTeamId();
-          const issueTeamId = (event.data as Record<string, unknown>)?.teamId as string | undefined;
-          if (configuredTeamId && issueTeamId && issueTeamId !== configuredTeamId) {
-            console.log(`Auto-react: ignoring Issue event for team ${issueTeamId}`);
-            return response;
-          }
-
           const classification = classifyIssueEvent(event);
           if (classification !== "skip") {
-            console.log(`Auto-react: ${classification} event, queuing heartbeat`);
-            debouncer.queue(`${event.action}-${(event.data as Record<string, unknown>)?.id || "unknown"}`);
+            console.log(`Auto-react[${ctx.teamId}]: ${classification} event, queuing heartbeat`);
+            getDebouncer(ctx).queue(`${event.action}-${(event.data as Record<string, unknown>)?.id || "unknown"}`);
           }
         }
       }

@@ -1,5 +1,6 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, copyFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { homeRoot } from "./env.js";
 
 interface TokenData {
   access_token: string;
@@ -7,9 +8,18 @@ interface TokenData {
   refresh_token?: string; // Present for authorization_code tokens, absent for client_credentials
 }
 
-// Fall back to cwd (where the server was started) if AGENT_CWD isn't set yet
-const AGENT_DIR = process.env.LINEAR_AGENT_DIR || (process.env.AGENT_CWD ? join(process.env.AGENT_CWD, ".scottclip") : join(process.cwd(), ".scottclip"));
+// Token lives in the global scottclip home (~/.scottclip/) so a single
+// workspace-scoped OAuth token serves all registered repos.
+const AGENT_DIR = homeRoot();
 export const TOKEN_PATH = join(AGENT_DIR, "token.json");
+
+// Legacy per-repo path used for one-time migration on first read.
+function legacyTokenPath(): string | null {
+  const legacyRoot = process.env.AGENT_CWD;
+  if (!legacyRoot) return null;
+  return join(legacyRoot, ".scottclip", "token.json");
+}
+
 const TOKEN_ENDPOINT = "https://api.linear.app/oauth/token";
 const REFRESH_BUFFER_MS = 60 * 60 * 1000;
 
@@ -21,6 +31,22 @@ async function ensureDir(): Promise<void> {
 
 async function loadCachedToken(): Promise<TokenData | null> {
   try {
+    const raw = await readFile(TOKEN_PATH, "utf-8");
+    return JSON.parse(raw) as TokenData;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.error("Error reading global token:", err);
+      return null;
+    }
+  }
+  // Migration: copy legacy per-repo token if global is missing
+  const legacy = legacyTokenPath();
+  if (!legacy) return null;
+  try {
+    await stat(legacy);
+    await ensureDir();
+    await copyFile(legacy, TOKEN_PATH);
+    console.log(`Migrated legacy token from ${legacy} to ${TOKEN_PATH}`);
     const raw = await readFile(TOKEN_PATH, "utf-8");
     return JSON.parse(raw) as TokenData;
   } catch {
@@ -160,7 +186,7 @@ async function refreshToken(token: TokenData): Promise<TokenData> {
   return newToken;
 }
 
-export function getAuthUrl(): string {
+export function getAuthUrl(state?: string): string {
   const clientId = process.env.LINEAR_CLIENT_ID;
   if (!clientId) {
     throw new Error("LINEAR_CLIENT_ID must be set.");
@@ -174,6 +200,7 @@ export function getAuthUrl(): string {
     scope: "read,write,app:assignable,app:mentionable",
     actor: "app",
   });
+  if (state) params.set("state", state);
   return `https://linear.app/oauth/authorize?${params}`;
 }
 

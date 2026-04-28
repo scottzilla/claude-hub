@@ -1,7 +1,7 @@
 ---
 name: scottclip-init
 description: This skill should be used when the user asks to "initialize scottclip", "set up scottclip", "scottclip init", "configure scottclip for this repo", or runs the /scottclip-init command. Scaffolds a repo with ScottClip config, role files, agent definitions, and Linear labels.
-version: 0.4.0
+version: 0.5.0
 ---
 
 # ScottClip Initialization
@@ -43,6 +43,21 @@ Run these checks at the start to determine where to resume:
    Stop.
 
 4. **No `linear-agent` in `.mcp.json` (or no `.mcp.json`)** → Fresh start. Run **Phase 1**.
+
+---
+
+## Phase 0: Detect Multi-Repo Mode
+
+Before Phase 1, detect whether a global ScottClip server is already running for another repo:
+
+1. Check if `~/.scottclip/registry.json` exists:
+   ```
+   Run via Bash: cat ~/.scottclip/registry.json 2>/dev/null
+   ```
+   - **File exists with at least one team entry** → multi-repo mode. The user has already initialized at least one other repo. Skip Phase 1's credential collection (credentials live in `~/.scottclip/.env`) and skip the server-start step (a server is already running for the workspace). Jump to Phase 1.5.
+   - **File missing or empty** → fresh install. Continue with Phase 1.
+
+2. Multi-repo mode also requires verifying we're targeting the same workspace. If the registry has entries, retrieve the existing `organizationId` (from any entry) and remember it for Step 0 of Phase 2.
 
 ---
 
@@ -90,24 +105,20 @@ This MUST succeed before proceeding — without it, the MCP server won't load af
 
 > **Important:** The config MUST be at `<project>/.mcp.json` (project scope), NOT `~/.claude/.mcp.json`. Claude Code only reads MCP configs from project-level `.mcp.json`, `~/.claude.json` (local scope), or `~/.claude/settings.json` (user scope). The path `~/.claude/.mcp.json` is NOT recognized.
 
-**Write `.scottclip/.env`.** Create the `.scottclip/` directory if needed. Write credentials to `.scottclip/.env` (the server loads this file automatically):
+**Write `~/.scottclip/.env`.** Create `~/.scottclip/` (mode 0700) if needed. Write credentials to the global env file (the server loads this file automatically and it covers all repos):
 
 ```
 LINEAR_CLIENT_ID=<client_id>
 LINEAR_CLIENT_SECRET=<client_secret>
 LINEAR_WEBHOOK_SECRET=
 LINEAR_CALLBACK_HOST=<tunnel_hostname>
-AGENT_CWD=<current_working_directory>
 ```
 
-`LINEAR_WEBHOOK_SECRET` is left empty for now — it will be set in Phase 2 after registering the webhook in Linear.
-
-`AGENT_CWD` is pre-filled with the current working directory. Present for confirmation:
-```
-Agent working directory: /current/path — press Enter to accept or type a different path:
-```
+`AGENT_CWD` is no longer required — the server resolves the target repo at runtime via `~/.scottclip/registry.json`.
 
 ### Step 3: Start Server and Authorize
+
+**Skip this entire step if Phase 0 detected an existing server for the same workspace.** Run `lsof -i :3847` to confirm the global server is already running before continuing.
 
 The MCP tools won't be available until after a restart. But we can still authorize now by starting the consolidated server directly.
 
@@ -168,6 +179,12 @@ The MCP tools won't be available until after a restart. But we can still authori
    https://linear.app/oauth/authorize?client_id=<client_id>&redirect_uri=<tunnel_hostname>/oauth/callback&response_type=code&scope=read,write,app:assignable,app:mentionable&actor=app
    ```
 
+   > The authorization URL should include a `state` parameter signed by the server. The skill cannot generate this signature — instead, fetch the URL from the server's status page:
+   > ```
+   > Run via Bash: curl -s http://localhost:3847/ | grep -oE 'href="[^"]*authorize[^"]*"'
+   > ```
+   > Open the resulting URL. The server signs `state` server-side using `LINEAR_CLIENT_SECRET`, encoding `{ cwd, organizationId, nonce, exp }`.
+
 7. **Open the browser:**
    ```
    Run via Bash: open "<authorization_url>"
@@ -199,9 +216,62 @@ Stop here. Phase 2 runs after restart.
 
 ---
 
+## Phase 1.5: Migrate Per-Repo Secrets (only when re-running on existing repos)
+
+If the repo already has a legacy `.scottclip/.env` from an older ScottClip version, copy any keys not already in the global env over and then delete the legacy file:
+
+```
+Run via Bash:
+  if [ -f .scottclip/.env ] && [ -f ~/.scottclip/.env ]; then
+    while IFS='=' read -r k v; do
+      [ -z "$k" ] && continue
+      [[ "$k" =~ ^# ]] && continue
+      grep -q "^$k=" ~/.scottclip/.env || echo "$k=$v" >> ~/.scottclip/.env
+    done < .scottclip/.env
+    mv .scottclip/.env .scottclip/.env.legacy
+  fi
+```
+
+Likewise, if a legacy `.scottclip/token.json` exists in this repo and `~/.scottclip/token.json` does not, the auth module will migrate it on its next read. No manual step required — but report to the user:
+
+```
+✓ Found legacy token at .scottclip/token.json — will be migrated to ~/.scottclip/token.json on next request
+```
+
+---
+
 ## Phase 2: Set Up ScottClip
 
 > Phase 2 starts when: project `.mcp.json` has `linear-agent` AND MCP tools are available.
+
+### Step 0: Register this repo in the global registry
+
+After Phase 2 Step 2 picks the team (skip ahead, do that step first, then return here — or perform Step 0 inline after team selection):
+
+1. Call `linear_get_organization` to retrieve the workspace `id`.
+2. If `~/.scottclip/registry.json` already has any entries, verify their `organizationId` matches the one returned. If not, abort with:
+   ```
+   This server is already serving workspace <existing-orgId>.
+   This repo's workspace is <new-orgId>. A single ScottClip server can serve only one workspace.
+   Stop a different server or use SCOTTCLIP_HOME=/some/other/path to run a second server in parallel.
+   ```
+3. Write a registry entry:
+   ```
+   Run via Bash:
+     node -e '
+       const r = require("<resolved_plugin_root>/mcp/linear-agent/dist/registry.js");
+       r.register({
+         teamId: "<selected_team_id>",
+         cwd: process.cwd(),
+         configPath: require("path").join(process.cwd(), ".scottclip", "config.yaml"),
+         organizationId: "<organization_id>",
+       });
+     '
+   ```
+4. Report:
+   ```
+   ✓ Registered team <team_id> → <cwd> in ~/.scottclip/registry.json
+   ```
 
 ### Step 1: Verify Authorization
 
@@ -412,3 +482,16 @@ If `.scottclip/config.yaml` already exists AND `.claude/agents/orchestrator.md` 
 3. **Version 2 config** (`roles:` section present): Ask the user: **overwrite** (fresh start), **merge** (add missing roles only), or **cancel**.
 4. For merge: only create role files and labels that don't exist yet; re-run Step 5b to refresh generated skills.
 5. For overwrite: back up existing config to `config.yaml.bak` before writing.
+
+---
+
+## Manual Smoke Test (multi-repo)
+
+After implementing multi-repo mode, verify end-to-end:
+
+1. In repo A, run `/scottclip-init` and complete Phase 1 + Phase 2. Confirm `~/.scottclip/registry.json` has team A.
+2. In repo B (different team in the same Linear workspace), run `/scottclip-init`. Confirm Phase 0 detects the existing server, Phase 1 is skipped, registry now has team A and team B.
+3. In Linear, mention the agent on an issue in team A — confirm Claude spawns in repo A's cwd (check `pwd` from a Bash tool call).
+4. In Linear, mention the agent on an issue in team B — confirm Claude spawns in repo B's cwd.
+5. Stop a session in team A — confirm only that session is killed; team B is unaffected.
+6. Try to register a third repo in a *different* Linear workspace — expect Phase 2 Step 0 to abort with the workspace-mismatch error.

@@ -5,7 +5,7 @@ import { serve } from "@hono/node-server";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { randomUUID } from "node:crypto";
-import { writeFileSync, unlinkSync } from "node:fs";
+import { writeFileSync, unlinkSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { registerIssueTools } from "./tools/issues.js";
 import { registerRelationTools } from "./tools/relations.js";
@@ -17,12 +17,13 @@ import { registerSessionTools } from "./tools/sessions.js";
 import { registerStateTools } from "./tools/states.js";
 import { createWebhookRoute } from "./webhook.js";
 import { createOAuthRoute, createStatusRoute } from "./oauth.js";
-import { loadDotEnv } from "./env.js";
+import { loadDotEnv, homeRoot } from "./env.js";
 
 // Load .scottclip/.env before anything reads process.env
 loadDotEnv();
 
 const PORT = parseInt(process.env.WEBHOOK_PORT || "3847", 10);
+const PID_PATH = join(homeRoot(), `server-${PORT}.pid`);
 
 // --- MCP Server Setup ---
 
@@ -112,11 +113,11 @@ async function main() {
       console.log(`  Status:  http://localhost:${info.port}/`);
 
       // Write PID file so init/status skills can track the running server
-      const pidPath = join(process.cwd(), ".scottclip", ".server.pid");
       try {
-        writeFileSync(pidPath, String(process.pid));
-      } catch {
-        // .scottclip dir might not exist yet — not fatal
+        mkdirSync(homeRoot(), { recursive: true, mode: 0o700 });
+        writeFileSync(PID_PATH, String(process.pid));
+      } catch (err) {
+        console.warn("Could not write PID file:", (err as NodeJS.ErrnoException).message);
       }
     }
   );
@@ -129,9 +130,8 @@ async function main() {
       transports.delete(id);
     }
     // Clean up PID file
-    const pidPath = join(process.cwd(), ".scottclip", ".server.pid");
     try {
-      unlinkSync(pidPath);
+      unlinkSync(PID_PATH);
     } catch {
       // File may not exist — not fatal
     }

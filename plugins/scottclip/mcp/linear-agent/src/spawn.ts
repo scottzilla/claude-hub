@@ -2,6 +2,7 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { gql } from "./graphql.js";
+import type { RepoContext } from "./repo-context.js";
 
 const ACK_MUTATION = `
   mutation AckSession($input: AgentActivityCreateInput!) {
@@ -209,11 +210,12 @@ export interface SpawnSessionOptions {
 
 export async function spawnClaudeSession(
   event: Record<string, unknown>,
-  spawnOpts?: SpawnSessionOptions,
+  ctx: RepoContext,
+  opts: SpawnSessionOptions & { sessionMap?: Map<string, string> } = {},
 ): Promise<void> {
-  const targetRepo = process.env.AGENT_CWD;
+  const targetRepo = ctx.cwd;
   if (!targetRepo) {
-    console.error("AGENT_CWD not set — cannot spawn Claude session");
+    console.error("RepoContext.cwd missing — cannot spawn Claude session");
     return;
   }
 
@@ -223,9 +225,14 @@ export async function spawnClaudeSession(
   const issueIdentifier = (webhookIssue?.identifier || session?.issueIdentifier || "unknown") as string;
   const sessionId = (session?.id || "unknown") as string;
 
+  // Track sessionId → teamId so the stop handler can route without re-extraction
+  if (opts.sessionMap && sessionId !== "unknown") {
+    opts.sessionMap.set(sessionId, ctx.teamId);
+  }
+
   let prompt: string;
 
-  if (spawnOpts?.resume) {
+  if (opts?.resume) {
     // Resumed session — skip full issue re-fetch; send only the new user message
     const comment = session?.comment as Record<string, unknown> | undefined;
     const creator = session?.creator as Record<string, unknown> | undefined;
@@ -275,8 +282,8 @@ export async function spawnClaudeSession(
         allowedTools: ["mcp__linear-agent*", "Read", "Write", "Edit", "Bash", "Grep", "Glob", "Agent"],
         permissionMode: "bypassPermissions",
         settingSources: ["project"],
-        ...(spawnOpts?.resume ? { resume: spawnOpts.resume } : {}),
-        ...(spawnOpts?.sessionId ? { sessionId: spawnOpts.sessionId } : {}),
+        ...(opts?.resume ? { resume: opts.resume } : {}),
+        ...(opts?.sessionId ? { sessionId: opts.sessionId } : {}),
       },
     } as any)) {
       const msg = message as Record<string, unknown>;
@@ -353,10 +360,16 @@ export async function spawnClaudeSession(
     // Write result to log
     await writeFile(logPath, finalResult || "(no result)");
     console.log(`Session ${sessionId} completed for ${issueIdentifier}`);
+    if (opts.sessionMap && sessionId !== "unknown") {
+      opts.sessionMap.delete(sessionId);
+    }
 
   } catch (err) {
     console.error(`Session ${sessionId} failed for ${issueIdentifier}:`, err);
     await writeFile(logPath, `Error: ${err instanceof Error ? err.message : String(err)}`);
+    if (opts.sessionMap && sessionId !== "unknown") {
+      opts.sessionMap.delete(sessionId);
+    }
 
     // Linear has no agentSessionFailed mutation — error is logged above, session left as-is
   }
