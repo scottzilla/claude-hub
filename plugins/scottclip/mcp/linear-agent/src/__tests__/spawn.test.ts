@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildClaudeArgs } from "../spawn.js";
+import { buildClaudeArgs, buildResumePrompt } from "../spawn.js";
 
 describe("buildClaudeArgs", () => {
   it("builds prompt from a real Linear webhook event", () => {
@@ -96,5 +96,55 @@ describe("buildClaudeArgs", () => {
     expect(result.prompt).toContain("**Bob:** second comment");
     expect(result.prompt).toContain("Workspace Guidance");
     expect(result.prompt).toContain("Always use TypeScript");
+  });
+});
+
+describe("buildResumePrompt", () => {
+  it("uses agentActivity.body for follow-up comment on prompted events, not session.comment.body", () => {
+    // Mirrors a real Linear AgentSessionEvent with action "prompted":
+    // agentSession.comment.body = the ORIGINAL session-creating comment (stale)
+    // agentActivity.body = the NEW follow-up comment the user just typed
+    const event = {
+      type: "AgentSessionEvent",
+      action: "prompted",
+      agentSession: {
+        id: "session-abc",
+        comment: {
+          body: "ORIGINAL",
+        },
+        creator: {
+          name: "Scott",
+        },
+      },
+      agentActivity: {
+        body: "FOLLOWUP",
+      },
+    };
+
+    const prompt = buildResumePrompt(event);
+
+    expect(prompt).toContain("FOLLOWUP");
+    expect(prompt).not.toContain("ORIGINAL");
+  });
+
+  it("falls back to session.comment.body when agentActivity.body is absent", () => {
+    const event = {
+      type: "AgentSessionEvent",
+      action: "created",
+      agentSession: {
+        id: "session-xyz",
+        comment: {
+          body: "FIRST_COMMENT",
+        },
+        creator: {
+          name: "Alice",
+        },
+      },
+      // no agentActivity
+    };
+
+    const prompt = buildResumePrompt(event);
+
+    expect(prompt).toContain("FIRST_COMMENT");
   });
 });
