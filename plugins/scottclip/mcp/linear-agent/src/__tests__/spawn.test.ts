@@ -100,10 +100,10 @@ describe("buildClaudeArgs", () => {
 });
 
 describe("buildResumePrompt", () => {
-  it("uses agentActivity.body for follow-up comment on prompted events, not session.comment.body", () => {
+  it("uses agentActivity.content.body for follow-up comment on prompted events, not session.comment.body", () => {
     // Mirrors a real Linear AgentSessionEvent with action "prompted":
     // agentSession.comment.body = the ORIGINAL session-creating comment (stale)
-    // agentActivity.body = the NEW follow-up comment the user just typed
+    // agentActivity.content.body = the NEW follow-up comment (Linear SDK: AgentActivityPromptContent)
     const event = {
       type: "AgentSessionEvent",
       action: "prompted",
@@ -117,7 +117,7 @@ describe("buildResumePrompt", () => {
         },
       },
       agentActivity: {
-        body: "FOLLOWUP",
+        content: { type: "prompt", body: "FOLLOWUP" },
       },
     };
 
@@ -127,7 +127,7 @@ describe("buildResumePrompt", () => {
     expect(prompt).not.toContain("ORIGINAL");
   });
 
-  it("falls back to session.comment.body when agentActivity.body is absent", () => {
+  it("falls back to session.comment.body when agentActivity.content.body is absent", () => {
     const event = {
       type: "AgentSessionEvent",
       action: "created",
