@@ -207,10 +207,12 @@ export function buildResumePrompt(event: Record<string, unknown>): string {
   const creator = session?.creator as Record<string, unknown> | undefined;
   const sessionId = (session?.id || "unknown") as string;
   const userName = (creator?.name || "someone") as string;
-  // For "prompted" events, the new follow-up comment body is on agentActivity.body.
+  // For "prompted" events, the new follow-up comment body is at agentActivity.content.body.
+  // Linear SDK: AgentActivityWebhookPayload.content is AgentActivityPromptContent { type, body }.
   // session.comment.body is the original session-creating comment and never changes.
   const agentActivity = event.agentActivity as Record<string, unknown> | undefined;
-  const userMessage = (agentActivity?.body as string | undefined) ?? (comment?.body as string | undefined);
+  const content = agentActivity?.content as Record<string, unknown> | undefined;
+  const userMessage = (content?.body as string | undefined) ?? (comment?.body as string | undefined);
 
   const lines = [
     `## Session`,
