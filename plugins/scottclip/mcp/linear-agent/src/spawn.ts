@@ -201,6 +201,28 @@ export interface SpawnSessionOptions {
   sessionId?: string;
 }
 
+export function buildResumePrompt(event: Record<string, unknown>): string {
+  const session = (event.agentSession || event.data) as Record<string, unknown> | undefined;
+  const comment = session?.comment as Record<string, unknown> | undefined;
+  const creator = session?.creator as Record<string, unknown> | undefined;
+  const sessionId = (session?.id || "unknown") as string;
+  const userName = (creator?.name || "someone") as string;
+  // For "prompted" events, the new follow-up comment body is on agentActivity.body.
+  // session.comment.body is the original session-creating comment and never changes.
+  const agentActivity = event.agentActivity as Record<string, unknown> | undefined;
+  const userMessage = (agentActivity?.body as string | undefined) ?? (comment?.body as string | undefined);
+
+  const lines = [
+    `## Session`,
+    `- Session ID: ${sessionId}`,
+    `- Action: ${(event.action as string) || "unknown"}`,
+  ];
+  if (userMessage) {
+    lines.push(``, `## Message from ${userName}`, userMessage);
+  }
+  return lines.join("\n");
+}
+
 export async function spawnClaudeSession(
   event: Record<string, unknown>,
   ctx: RepoContext,
@@ -227,20 +249,7 @@ export async function spawnClaudeSession(
 
   if (opts?.resume) {
     // Resumed session — skip full issue re-fetch; send only the new user message
-    const comment = session?.comment as Record<string, unknown> | undefined;
-    const creator = session?.creator as Record<string, unknown> | undefined;
-    const userName = (creator?.name || "someone") as string;
-    const userMessage = comment?.body as string | undefined;
-
-    const lines = [
-      `## Session`,
-      `- Session ID: ${sessionId}`,
-      `- Action: ${(event.action as string) || "unknown"}`,
-    ];
-    if (userMessage) {
-      lines.push(``, `## Message from ${userName}`, userMessage);
-    }
-    prompt = lines.join("\n");
+    prompt = buildResumePrompt(event);
   } else {
     // First run — fetch full issue context
     let fetchedIssue: IssueData | null = null;
