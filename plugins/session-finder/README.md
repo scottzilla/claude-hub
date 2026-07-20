@@ -12,7 +12,11 @@ Run inside Claude Code:
 /session-finder [search term]
 ```
 
-Lists matching sessions as a numbered list and, once you pick one, prints the exact copy-pasteable command:
+If you have 4 or fewer matches, presents them all as an interactive picker via Claude Code's `AskUserQuestion` tool. If there are more than 4, shows the 4 most recent (the results are already sorted newest-first) and says how many matched in total. Picking **"Other"** and typing free text doesn't resume anything — it re-runs the search with that text as the new search term, so you can narrow down further. This can repeat up to 3 rounds total (2 re-narrowings); if you're still picking "Other" after that, it falls back to a plain numbered list and asks you to reply with a number directly.
+
+If `AskUserQuestion` isn't available to the agent executing the command (e.g. a dispatched subagent without that tool), it falls back to the same plain-numbered-list-plus-reply-in-prose flow.
+
+Once you pick an actual session (not "Other"), it prints the exact copy-pasteable command:
 
 ```
 cd "<cwd>" && claude --resume <id>
@@ -28,7 +32,7 @@ Run **directly in your terminal**, not through Claude Code:
 plugins/session-finder/bin/session-finder [search term]
 ```
 
-This one *does* auto-resume: it uses `exec claude --resume <id>` to replace its own process with the resumed session, so you land directly inside it. If [`fzf`](https://github.com/junegunn/fzf) is installed, selection is an interactive fuzzy-search picker; otherwise it falls back to a numbered list with a plain prompt.
+This one *does* auto-resume: it uses `exec claude --resume <id>` to replace its own process with the resumed session, so you land directly inside it. If [`fzf`](https://github.com/junegunn/fzf) is installed, selection is an interactive fuzzy-search picker; otherwise it prints a tip to install `fzf` and falls back to a numbered list with a plain prompt.
 
 ### Install
 

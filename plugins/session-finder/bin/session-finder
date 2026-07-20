@@ -34,7 +34,7 @@ if command -v fzf >/dev/null 2>&1; then
   fi
   selected_line="$(printf '%s' "${chosen}" | cut -f2-)"
 else
-  echo "fzf not found -- falling back to a numbered list. (Install fzf for interactive fuzzy search.)" >&2
+  echo "Tip: install fzf for interactive fuzzy search (https://github.com/junegunn/fzf) -- falling back to a numbered list." >&2
   echo >&2
   i=0
   ids=()
