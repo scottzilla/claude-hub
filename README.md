@@ -8,6 +8,7 @@ A marketplace of Claude Code plugins and MCP servers for AI task delegation and 
 |---|---|
 | [`claude-dispatch`](./plugins/claude-dispatch/) | Routes tasks to Haiku, Sonnet, or Opus based on complexity |
 | [`scottclip`](./plugins/scottclip/) | Linear-backed agent orchestration with persona-based task routing |
+| [`session-finder`](./plugins/session-finder/) | Find and resume previous Claude Code sessions across all projects |
 
 ## How it works
 

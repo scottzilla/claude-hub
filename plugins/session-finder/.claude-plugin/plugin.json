@@ -1,0 +1,5 @@
+{
+  "name": "session-finder",
+  "version": "1.0.0",
+  "description": "Find and resume previous Claude Code sessions across all projects"
+}

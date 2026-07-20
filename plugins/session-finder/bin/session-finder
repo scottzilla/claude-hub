@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Standalone session-finder. Run this directly in your terminal (NOT through
+# Claude Code) so it has a real TTY and can `exec` into the resumed session,
+# replacing itself -- this is what the /session-finder slash command cannot
+# do, since a Bash-tool call inside a Claude Code turn has no TTY.
+#
+# Usage: session-finder [search term]
+
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+list_sessions="${script_dir}/../scripts/list-sessions.sh"
+
+if [ ! -x "${list_sessions}" ]; then
+  echo "session-finder: could not find list-sessions.sh at ${list_sessions}" >&2
+  exit 1
+fi
+
+raw="$("${list_sessions}" "${1:-}")"
+
+if [ -z "${raw}" ]; then
+  echo "No matching sessions found." >&2
+  exit 0
+fi
+
+selected_line=""
+
+if command -v fzf >/dev/null 2>&1; then
+  display="$(printf '%s\n' "${raw}" | awk -F '\t' '{printf "%s · %s · %s · %s\t%s\n", $2, $3, $4, $5, $0}')"
+  chosen="$(printf '%s\n' "${display}" | fzf --delimiter '\t' --with-nth=1 --prompt='Resume session> ')"
+  if [ -z "${chosen}" ]; then
+    echo "No session selected." >&2
+    exit 0
+  fi
+  selected_line="$(printf '%s' "${chosen}" | cut -f2-)"
+else
+  echo "fzf not found -- falling back to a numbered list. (Install fzf for interactive fuzzy search.)" >&2
+  echo >&2
+  i=0
+  ids=()
+  lines=()
+  while IFS=$'\t' read -r id title cwd branch relative; do
+    i=$((i + 1))
+    ids+=("${id}")
+    lines+=("${id}"$'\t'"${title}"$'\t'"${cwd}"$'\t'"${branch}"$'\t'"${relative}")
+    printf '%d. %s · %s · %s · %s\n' "${i}" "${title}" "${cwd}" "${branch}" "${relative}" >&2
+  done <<< "${raw}"
+
+  printf '\n' >&2
+  read -r -p "Resume which session? (number, or blank to cancel): " choice || choice=""
+  if [ -z "${choice}" ]; then
+    echo "No session selected." >&2
+    exit 0
+  fi
+  if ! [[ "${choice}" =~ ^[0-9]+$ ]] || [ "${choice}" -lt 1 ] || [ "${choice}" -gt "${#lines[@]}" ]; then
+    echo "session-finder: invalid selection: ${choice}" >&2
+    exit 1
+  fi
+  selected_line="${lines[$((choice - 1))]}"
+fi
+
+session_id="$(printf '%s' "${selected_line}" | cut -f1)"
+session_cwd="$(printf '%s' "${selected_line}" | cut -f3)"
+
+echo "Resuming session ${session_id} in ${session_cwd} ..." >&2
+cd "${session_cwd}"
+exec claude --resume "${session_id}"

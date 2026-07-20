@@ -25,6 +25,16 @@
       },
       "source": "./plugins/scottclip",
       "category": "development"
+    },
+    {
+      "name": "session-finder",
+      "description": "Find and resume previous Claude Code sessions across all projects",
+      "version": "1.0.0",
+      "author": {
+        "name": "scottzilla"
+      },
+      "source": "./plugins/session-finder",
+      "category": "development"
     }
   ]
 }
